@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     `;
     await pool.execute(query, [terminalId, lat, lng, currentAddress, timestamp]);
 
-    console.log(`✅ Successfully saved telemetry for terminal ${terminalId} -> Lat: ${lat}, Lng: ${lng}`);
+    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}`);
     return NextResponse.json({ status: 'success', latitude: lat, longitude: lng }, { status: 200 });
 
   } catch (error) {
