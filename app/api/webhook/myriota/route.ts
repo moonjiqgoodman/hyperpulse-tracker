@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
+import mysql from 'mysql2/promise';
 
-// 1. In-memory variable to hold the latest data
-let latestDeviceData = {
-  terminal_id: 'WAITING_FOR_DATA',
-  latitude: 0,
-  longitude: 0,
-  address: 'No data received yet',
-  timestamp: new Date().toISOString()
-};
+// Initialize MySQL connection pool using environment variables
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'hyperpulse_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 
-// Helper: Translates coordinates to address
+// Helper: Translates coordinates to a human-readable address
 async function getAddressFromCoords(lat: number, lng: number) {
   if (lat === 0 && lng === 0) return "Unknown Location";
   try {
@@ -25,23 +28,28 @@ async function getAddressFromCoords(lat: number, lng: number) {
 }
 
 // ------------------------------------------------------------------
-// POST: Myriota sends data here
+// POST: Myriota sends data -> Decodes, geocodes, and saves to MySQL
 // ------------------------------------------------------------------
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
     
     let myriotaData;
-    try { myriotaData = JSON.parse(payload.Data); } 
-    catch(e) { return NextResponse.json({ error: 'Data is not valid JSON' }, { status: 400 }); }
+    try { 
+      myriotaData = JSON.parse(payload.Data); 
+    } catch (e) { 
+      return NextResponse.json({ error: 'Data is not valid JSON' }, { status: 400 }); 
+    }
     
     const packet = myriotaData.Packets?.[0];
-    if (!packet) return NextResponse.json({ error: 'No packet data' }, { status: 400 });
+    if (!packet) {
+      return NextResponse.json({ error: 'No packet data' }, { status: 400 });
+    }
 
     let lat = 0.0;
     let lng = 0.0;
     
-    // Extract and decode hex string
+    // Extract and decode hex string coordinates (Little-Endian float)
     let hexString = '';
     if (typeof packet.Value === 'string') {
       hexString = packet.Value;
@@ -56,29 +64,41 @@ export async function POST(request: Request) {
     }
 
     const currentAddress = await getAddressFromCoords(lat, lng);
+    const terminalId = packet.TerminalId || packet.SerialNumber || 'UNKNOWN_ASSET';
+    
+    const timestamp = packet.Timestamp 
+      ? new Date(packet.Timestamp).toISOString().slice(0, 19).replace('T', ' ')
+      : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    // 2. Update the in-memory variable with the new data
-    latestDeviceData = {
-      terminal_id: packet.TerminalId || packet.SerialNumber || 'UNKNOWN_ASSET',
-      latitude: lat,
-      longitude: lng,
-      address: currentAddress,
-      timestamp: new Date(packet.Timestamp).toISOString(),
-    };
+    // Insert telemetry record into database
+    const query = `
+      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, address, recorded_at) 
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    await pool.execute(query, [terminalId, lat, lng, currentAddress, timestamp]);
 
-    console.log('✅ Updated Memory with:', latestDeviceData);
+    console.log('✅ Saved telemetry to MySQL for terminal:', terminalId);
     return NextResponse.json({ status: 'success' }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ Webhook error:', error);
-    return NextResponse.json({ status: 'error' }, { status: 500 });
+    console.error('❌ Database save error:', error);
+    return NextResponse.json({ status: 'error', message: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 // ------------------------------------------------------------------
-// GET: You visit the URL in your browser to see the JSON
+// GET: Returns historical movement logs when visiting the endpoint
 // ------------------------------------------------------------------
 export async function GET() {
-  // 3. Spits out the latest data whenever you visit the link
-  return NextResponse.json(latestDeviceData, { status: 200 });
+  try {
+    // Fetch the last 50 historical records ordered by newest first
+    const [rows] = await pool.execute(
+      'SELECT * FROM telemetry_logs ORDER BY recorded_at DESC LIMIT 50'
+    );
+    
+    return NextResponse.json(rows, { status: 200 });
+  } catch (error) {
+    console.error('❌ Database fetch error:', error);
+    return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 });
+  }
 }
