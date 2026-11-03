@@ -14,7 +14,8 @@ import {
   faExclamationTriangle,
   faSun,
   faMoon,
-  faRightFromBracket
+  faRightFromBracket,
+  faBars
 } from '@fortawesome/free-solid-svg-icons';
 import Sidebar from '@/components/sidebar';
 
@@ -191,8 +192,25 @@ export default function DeviceRegistryPage() {
       {/* Main Content Area */}
       <main className="flex-1 h-full overflow-y-auto flex flex-col">
         {/* Top Header Bar matching Dashboard layout */}
-        <header className="h-14 border-b border-border bg-card/30 backdrop-blur px-4 md:px-6 flex items-center justify-between shrink-0 z-10">
+<header className="h-14 border-b border-border bg-card/30 backdrop-blur px-4 md:px-6 flex items-center justify-between shrink-0 z-10">
           <div className="flex items-center gap-3">
+            {/* Mobile Hamburger Menu Button */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              className="md:hidden h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer"
+              title="Toggle Menu"
+            >
+              <FontAwesomeIcon icon={faBars} className="h-3.5 w-3.5" />
+            </button>
+
+            <Link
+              href="/"
+              className="h-8 px-2.5 flex items-center gap-1.5 rounded-md border border-border bg-background text-foreground text-xs font-semibold hover:bg-muted transition-colors"
+            >
+              <FontAwesomeIcon icon={faArrowLeft} className="h-3 w-3" />
+              <span>Map</span>
+            </Link>
+
             <div className="flex items-center gap-2 text-xs font-semibold">
               <FontAwesomeIcon icon={faMicrochip} className="text-primary" />
               <span className="hidden sm:inline">Device Registry & Management</span>
