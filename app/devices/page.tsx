@@ -203,14 +203,6 @@ export default function DeviceRegistryPage() {
               <FontAwesomeIcon icon={faBars} className="h-3.5 w-3.5" />
             </button>
 
-            <Link
-              href="/"
-              className="h-8 px-2.5 flex items-center gap-1.5 rounded-md border border-border bg-background text-foreground text-xs font-semibold hover:bg-muted transition-colors"
-            >
-              <FontAwesomeIcon icon={faArrowLeft} className="h-3 w-3" />
-              <span>Map</span>
-            </Link>
-
             <div className="flex items-center gap-2 text-xs font-semibold">
               <FontAwesomeIcon icon={faMicrochip} className="text-primary" />
               <span className="hidden sm:inline">Device Registry & Management</span>
