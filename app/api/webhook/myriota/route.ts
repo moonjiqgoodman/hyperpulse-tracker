@@ -33,41 +33,63 @@ async function getAddressFromCoords(lat: number, lng: number) {
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    console.log('📥 Raw Webhook Payload Received:', JSON.stringify(payload, null, 2));
     
     let myriotaData;
     try { 
-      myriotaData = JSON.parse(payload.Data); 
+      // Handle cases where payload.Data is a stringified JSON or an object
+      myriotaData = typeof payload.Data === 'string' ? JSON.parse(payload.Data) : (payload.Data || payload); 
     } catch (e) { 
       return NextResponse.json({ error: 'Data is not valid JSON' }, { status: 400 }); 
     }
     
-    const packet = myriotaData.Packets?.[0];
+    const packet = myriotaData.Packets?.[0] || myriotaData;
     if (!packet) {
       return NextResponse.json({ error: 'No packet data' }, { status: 400 });
     }
 
     let lat = 0.0;
     let lng = 0.0;
+
+    // 1. Check if latitude and longitude are sent directly as JSON properties (Myriota User Messages JSON format)
+    let messageContent = packet.Data || packet.message || packet.Value;
     
-    // Extract and decode hex string coordinates (Little-Endian float)
-    let hexString = '';
-    if (typeof packet.Value === 'string') {
-      hexString = packet.Value;
-    } else if (Array.isArray(packet.Value) && packet.Value[0]?.data) {
-      hexString = packet.Value[0].data;
+    if (typeof messageContent === 'string') {
+      try {
+        messageContent = JSON.parse(messageContent);
+      } catch (err) {
+        // Not a direct JSON string, might be hex or raw text
+      }
     }
 
-    if (hexString && hexString.length >= 16) { 
-      const buffer = Buffer.from(hexString, 'hex');
-      lat = buffer.readFloatLE(0); 
-      lng = buffer.readFloatLE(4); 
+    // Unpack if wrapped in an array (e.g. [{latitude: ..., longitude: ...}])
+    const dataObj = Array.isArray(messageContent) ? messageContent[0] : messageContent;
+
+    if (dataObj && typeof dataObj === 'object' && ('latitude' in dataObj || 'lat' in dataObj)) {
+      lat = parseFloat(dataObj.latitude || dataObj.lat || 0);
+      lng = parseFloat(dataObj.longitude || dataObj.lng || dataObj.lon || 0);
+    } 
+    // 2. Fallback: Extract and decode hex string coordinates if JSON fields are missing
+    else {
+      let hexString = '';
+      if (typeof packet.Value === 'string') {
+        hexString = packet.Value;
+      } else if (Array.isArray(packet.Value) && packet.Value[0]?.data) {
+        hexString = packet.Value[0].data;
+      }
+
+      if (hexString && hexString.length >= 16) { 
+        const buffer = Buffer.from(hexString, 'hex');
+        lat = buffer.readFloatLE(0); 
+        lng = buffer.readFloatLE(4); 
+      }
     }
 
     const currentAddress = await getAddressFromCoords(lat, lng);
-    const terminalId = packet.TerminalId || packet.SerialNumber || 'UNKNOWN_ASSET';
+    const terminalId = packet.TerminalId || packet.terminal_id || packet.SerialNumber || 'UNKNOWN_ASSET';
     
-    const timestamp = packet.Timestamp 
-      ? new Date(packet.Timestamp).toISOString().slice(0, 19).replace('T', ' ')
+    const timestamp = packet.Timestamp || packet.time
+      ? new Date((packet.Timestamp || packet.time) * (String(packet.Timestamp || packet.time).length === 10 ? 1000 : 1)).toISOString().slice(0, 19).replace('T', ' ')
       : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     // Insert telemetry record into database
@@ -77,8 +99,8 @@ export async function POST(request: Request) {
     `;
     await pool.execute(query, [terminalId, lat, lng, currentAddress, timestamp]);
 
-    console.log('✅ Saved telemetry to MySQL for terminal:', terminalId);
-    return NextResponse.json({ status: 'success' }, { status: 200 });
+    console.log(`✅ Saved telemetry for terminal ${terminalId} -> Lat: ${lat}, Lng: ${lng}`);
+    return NextResponse.json({ status: 'success', latitude: lat, longitude: lng }, { status: 200 });
 
   } catch (error) {
     console.error('❌ Database save error:', error);
