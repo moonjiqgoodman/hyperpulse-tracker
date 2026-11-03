@@ -30,26 +30,45 @@ export async function POST(request: Request) {
     const payload = await request.json();
     console.log('REC Payload:', JSON.stringify(payload, null, 2));
 
-    let dataObj: any = null;
-    let terminalId = payload.TerminalId || payload.terminal_id || 'UNKNOWN_ASSET';
+    let parsedData = payload;
 
-    if (Array.isArray(payload)) {
-      dataObj = payload[0];
-    } else {
-      let targetData = payload.Data || payload.message || payload;
-      if (typeof targetData === 'string') {
-        try { targetData = JSON.parse(targetData); } catch (e) {}
+    // If Myriota sent 'Data' as a stringified JSON, parse it first
+    if (parsedData.Data && typeof parsedData.Data === 'string') {
+      try {
+        parsedData = JSON.parse(parsedData.Data);
+      } catch (e) {
+        // Keep as is if it fails
       }
-      dataObj = Array.isArray(targetData) ? targetData[0] : targetData;
     }
+
+    // Extract packet structure from Packets array if present
+    const packet = parsedData.Packets?.[0] || parsedData;
+
+    // Resolve TerminalId from any level of the payload
+    let terminalId = 
+      packet.TerminalId || 
+      packet.terminal_id || 
+      parsedData.TerminalId || 
+      parsedData.terminal_id || 
+      payload.TerminalId || 
+      'UNKNOWN_ASSET';
+
+    // Extract the inner message value/data
+    let innerVal = packet.Value || packet.Data || packet.message || packet;
+    if (typeof innerVal === 'string') {
+      try { innerVal = JSON.parse(innerVal); } catch (e) {}
+    }
+
+    const dataObj = Array.isArray(innerVal) ? innerVal[0] : (Array.isArray(packet.Data) ? packet.Data[0] : innerVal);
 
     const lat = parseFloat(dataObj?.latitude || dataObj?.lat || 0);
     const lng = parseFloat(dataObj?.longitude || dataObj?.lng || dataObj?.lon || 0);
 
     const currentAddress = await getAddressFromCoords(lat, lng);
     
-    const timestamp = dataObj?.time
-      ? new Date(dataObj.time * (String(dataObj.time).length === 10 ? 1000 : 1)).toISOString().slice(0, 19).replace('T', ' ')
+    const rawTime = packet.Timestamp || dataObj?.time;
+    const timestamp = rawTime
+      ? new Date(rawTime * (String(rawTime).length === 10 ? 1000 : 1)).toISOString().slice(0, 19).replace('T', ' ')
       : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     const query = `
@@ -59,7 +78,7 @@ export async function POST(request: Request) {
     await pool.execute(query, [terminalId, lat, lng, currentAddress, timestamp]);
 
     console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}`);
-    return NextResponse.json({ status: 'success', latitude: lat, longitude: lng }, { status: 200 });
+    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng }, { status: 200 });
 
   } catch (error) {
     console.error('Database save error:', error);
