@@ -26,7 +26,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
   const markersRef = useRef<{ [key: number]: any }>({});
-  const polylineRef = useRef<any | null>(null); // Reference to polyline to easily re-fit bounds on demand
+  const polylineRef = useRef<any | null>(null);
   const hasFittedBoundsRef = useRef(false);
   const prevSelectedDeviceRef = useRef(selectedDevice);
 
@@ -208,7 +208,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         lineCap: 'round',
       });
       layerGroup.addLayer(dashedPolyline);
-      polylineRef.current = dashedPolyline; // Save ref for reset view button
+      polylineRef.current = dashedPolyline;
 
       terminalLogs.forEach((log: any, index: number) => {
         const lat = parseFloat(log.latitude);
@@ -291,7 +291,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Reset Map View to fit all current waypoints perfectly
   const handleResetMapView = () => {
     const map = mapRef.current;
     const polyline = polylineRef.current;
@@ -373,7 +372,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 </button>
                 <button
                   onClick={() => { setConfirmInput(''); setIsResetModalOpen(true); }}
-                  className="flex items-center gap-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 bg-destructive hover:bg-destructive/90 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
                   title="Reset / Delete all telemetry data"
                 >
                   <FontAwesomeIcon icon={faTrashCan} className="h-3.5 w-3.5" />
@@ -523,7 +522,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <button
                 onClick={handleConfirmReset}
                 disabled={confirmInput !== expectedDeletePhrase || isDeleting}
-                className="px-4 py-2 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-md bg-destructive text-white hover:bg-destructive/90 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDeleting ? 'Deleting...' : 'Permanently Delete'}
               </button>
