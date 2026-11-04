@@ -17,7 +17,8 @@ import {
   faRightFromBracket,
   faBars,
   faChevronDown,
-  faUserCircle
+  faUserCircle,
+  faLink
 } from '@fortawesome/free-solid-svg-icons';
 import Sidebar from '@/components/sidebar';
 
@@ -44,8 +45,8 @@ export default function DevicesPage() {
   const [telemetryLogs, setTelemetryLogs] = useState<TelemetryLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   
-  // New Device Form State
-  const [terminalId, setTerminalId] = useState('');
+  // Pairing Form State (Selection Only)
+  const [selectedTerminalId, setSelectedTerminalId] = useState('');
   const [deviceName, setDeviceName] = useState('');
   
   // Feedback State
@@ -134,10 +135,15 @@ export default function DevicesPage() {
     fetchData();
   }, [isAuthenticated]);
 
+  // Extract unique active terminal IDs from telemetry logs that are not yet registered
+  const registeredTerminalIds = new Set(devices.map(d => String(d.terminal_id).trim()));
+  const uniqueSeenTerminals = Array.from(new Set(telemetryLogs.map(l => String(l.terminal_id).trim())));
+  const unpairedTerminals = uniqueSeenTerminals.filter(id => !registeredTerminalIds.has(id));
+
   const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!terminalId || !deviceName) {
-      setMessage({ type: 'error', text: 'Terminal ID and Device Name are required.' });
+    if (!selectedTerminalId || !deviceName) {
+      setMessage({ type: 'error', text: 'Please select a Terminal ID and enter a Device Name.' });
       return;
     }
 
@@ -145,13 +151,13 @@ export default function DevicesPage() {
       const res = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ terminal_id: terminalId, device_name: deviceName }),
+        body: JSON.stringify({ terminal_id: selectedTerminalId, device_name: deviceName }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: 'success', text: `Device "${deviceName}" registered successfully!` });
-        setTerminalId('');
+        setMessage({ type: 'success', text: `Device "${deviceName}" paired successfully!` });
+        setSelectedTerminalId('');
         setDeviceName('');
         fetchData();
       } else {
@@ -214,7 +220,7 @@ export default function DevicesPage() {
 
             <div className="flex items-center gap-2 text-xs font-semibold">
               <FontAwesomeIcon icon={faMicrochip} className="text-primary" />
-              <span className="hidden sm:inline">Device Registry & Management</span>
+              <span className="hidden sm:inline">Device Registry & Pairing</span>
             </div>
           </div>
 
@@ -274,45 +280,60 @@ export default function DevicesPage() {
             </div>
           )}
 
-          {/* Add Device Form */}
+          {/* Pair / Register Device Form */}
           <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Register New Device Name
+              Pair & Register Device
             </h2>
 
-            <form onSubmit={handleRegisterDevice} className="border border-border rounded-lg bg-card p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleRegisterDevice} className="border border-border rounded-xl bg-card p-5 space-y-4 shadow-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">Terminal ID</label>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Select Available Terminal ID</label>
+                  <div className="relative">
+                    <select
+                      value={selectedTerminalId}
+                      onChange={(e) => setSelectedTerminalId(e.target.value)}
+                      className="w-full bg-background text-xs text-foreground px-3 py-2.5 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-primary font-mono cursor-pointer appearance-none shadow-2xs pr-8"
+                    >
+                      <option value="" className="bg-card text-muted-foreground">-- Select an available terminal ID --</option>
+                      {unpairedTerminals.map((id) => (
+                        <option key={id} value={id} className="bg-card text-foreground py-1">
+                          {id}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-[10px]">
+                      ▼
+                    </div>
+                  </div>
+                  {unpairedTerminals.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1.5 font-mono">No new unassigned terminal IDs detected yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Device Name</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Device ##"
-                    value={terminalId}
-                    onChange={(e) => setTerminalId(e.target.value)}
-                    className="w-full bg-background text-xs text-foreground px-3 py-2 rounded-md border border-input focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">Device Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Alpha Tracker Vehicle"
                     value={deviceName}
                     onChange={(e) => setDeviceName(e.target.value)}
-                    className="w-full bg-background text-xs text-foreground px-3 py-2 rounded-md border border-input focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full bg-background text-xs text-foreground px-3 py-2.5 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs"
                   />
                 </div>
               </div>
-              <div className="flex justify-end pt-1">
+
+              <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                  disabled={unpairedTerminals.length === 0}
+                  className="px-5 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-lg transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
-                  <span>Save Device Name</span>
+                  <FontAwesomeIcon icon={faLink} className="h-3 w-3" />
+                  <span>Pair Device</span>
                 </button>
               </div>
             </form>
@@ -322,22 +343,22 @@ export default function DevicesPage() {
           <div className="space-y-2 pt-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Registered Devices ({devices.length})
+              Paired Devices ({devices.length})
             </h2>
 
-            <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <div className="border border-border rounded-xl bg-card overflow-hidden shadow-xs">
               {loading ? (
                 <div className="p-6 text-center text-xs font-mono text-muted-foreground animate-pulse">
                   Loading devices...
                 </div>
               ) : devices.length === 0 ? (
                 <div className="p-6 text-center text-xs text-muted-foreground">
-                  No custom device names registered yet.
+                  No devices paired yet.
                 </div>
               ) : (
                 <div className="divide-y divide-border">
                   {devices.map((dev) => (
-                    <div key={dev.id} className="p-3.5 flex items-center justify-between gap-3">
+                    <div key={dev.id} className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors">
                       <div>
                         <div className="text-xs font-bold text-foreground">{dev.device_name}</div>
                         <div className="text-[11px] font-mono text-muted-foreground mt-0.5">ID: {dev.terminal_id}</div>
@@ -345,10 +366,10 @@ export default function DevicesPage() {
 
                       <button
                         onClick={() => handleDeleteDevice(dev.terminal_id)}
-                        className="px-2.5 py-1 text-xs font-semibold rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-semibold rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
                       >
                         <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                        <span>Remove</span>
+                        <span>Unpair</span>
                       </button>
                     </div>
                   ))}
