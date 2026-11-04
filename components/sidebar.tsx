@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicrochip, faUsers, faLink, faChartLine, faSignal } from '@fortawesome/free-solid-svg-icons';
+import { faMicrochip, faUsers, faLink, faClock, faSignal } from '@fortawesome/free-solid-svg-icons';
 
 interface DeviceLog {
   terminal_id: string;
@@ -139,6 +139,36 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
+  // Helper to compute average message interval/frequency for a specific terminal ID
+  const getDeviceFrequencyInfo = (terminalId: string) => {
+    const deviceLogs = devices.filter(d => String(d.terminal_id).trim() === String(terminalId).trim());
+    if (deviceLogs.length <= 1) return 'First message';
+
+    const timestamps = deviceLogs
+      .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
+      .filter(t => !isNaN(t) && t > 0)
+      .sort((a, b) => a - b); // chronological
+
+    if (timestamps.length < 2) return '1 msg recorded';
+
+    // Calculate average time difference between consecutive coordinate messages
+    let totalDiffMs = 0;
+    for (let i = 1; i < timestamps.length; i++) {
+      totalDiffMs += (timestamps[i] - timestamps[i - 1]);
+    }
+    const avgDiffMs = totalDiffMs / (timestamps.length - 1);
+    const avgDiffMins = Math.round(avgDiffMs / (1000 * 60));
+    const avgDiffHours = avgDiffMs / (1000 * 60 * 60);
+
+    if (avgDiffMins < 60) {
+      return `~${avgDiffMins}m / msg`;
+    } else if (avgDiffHours < 24) {
+      return `~${avgDiffHours.toFixed(1)}h / msg`;
+    } else {
+      return `~${(avgDiffHours / 24).toFixed(1)}d / msg`;
+    }
+  };
+
   const uniqueDevicesMap = new Map();
   devices.forEach((d) => {
     if (!uniqueDevicesMap.has(d.terminal_id)) {
@@ -153,29 +183,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     if (filter === 'OFFLINE') return !online;
     return true;
   });
-
-  // --- Telemetry Analytics Calculation ---
-  const totalPackets = devices.length;
-  let avgPacketsPerHour = '0.0';
-  
-  if (totalPackets > 0) {
-    const timestamps = devices
-      .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
-      .filter(t => !isNaN(t) && t > 0);
-    
-    if (timestamps.length >= 2) {
-      const oldest = Math.min(...timestamps);
-      const newest = Math.max(...timestamps);
-      const spanHours = (newest - oldest) / (1000 * 60 * 60);
-      if (spanHours > 0) {
-        avgPacketsPerHour = (totalPackets / spanHours).toFixed(1);
-      } else {
-        avgPacketsPerHour = totalPackets.toFixed(1);
-      }
-    } else if (timestamps.length === 1) {
-      avgPacketsPerHour = '1.0';
-    }
-  }
 
   return (
     <>
@@ -212,27 +219,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </span>
           </div>
 
-          {/* Telemetry Analytics Summary Card */}
-          <div className="bg-background/80 border border-border rounded-lg p-2.5 space-y-2 shadow-2xs font-mono">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-semibold uppercase tracking-wider border-b border-border/60 pb-1.5">
-              <span className="flex items-center gap-1.5 text-primary">
-                <FontAwesomeIcon icon={faChartLine} className="h-3 w-3" />
-                Transmission Insights
-              </span>
-              <span className="text-foreground">{totalPackets} Logs</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div className="bg-muted/50 p-1.5 rounded border border-border/40">
-                <div className="text-[9px] text-muted-foreground">Avg Rate</div>
-                <div className="text-xs font-bold text-foreground mt-0.5">{avgPacketsPerHour} <span className="text-[9px] font-normal text-muted-foreground">pkt/h</span></div>
-              </div>
-              <div className="bg-muted/50 p-1.5 rounded border border-border/40">
-                <div className="text-[9px] text-muted-foreground">Active Assets</div>
-                <div className="text-xs font-bold text-emerald-500 mt-0.5">{deviceList.length} <span className="text-[9px] font-normal text-muted-foreground">units</span></div>
-              </div>
-            </div>
-          </div>
-
           <div className="relative">
             <select
               value={filter}
@@ -249,7 +235,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           </div>
         </div>
 
-        {/* Device List Section */}
+        {/* Device List Section with Frequency Analysis at the Bottom of Each Tab */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
           {filteredDevices.length === 0 ? (
             <div className="text-center text-muted-foreground text-xs py-10">
@@ -262,6 +248,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
               const timeAgoText = getTimeAgo(device.timestamp_my || device.recorded_at);
               const malaysiaTimeText = formatToMalaysiaTime(device);
               const friendlyName = deviceNames[device.terminal_id];
+              const frequencyText = getDeviceFrequencyInfo(device.terminal_id);
 
               return (
                 <div
@@ -300,12 +287,18 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                       </span>
                     </span>
                   </div>
-                  <p className="text-[11px] truncate opacity-80 mb-1">
+                  
+                  <p className="text-[11px] truncate opacity-80 mb-1.5">
                     {device.address || 'Unknown location'}
                   </p>
-                  <div className="text-[9px] font-mono opacity-50 flex items-center justify-between">
+
+                  {/* Transmission frequency indicator at the bottom of each device card */}
+                  <div className="text-[9px] font-mono opacity-60 flex items-center justify-between pt-1 border-t border-border/40">
                     <span>{malaysiaTimeText}</span>
-                    <span className="text-[8px] uppercase tracking-wider opacity-75">GMT+8</span>
+                    <span className="flex items-center gap-1 text-primary font-medium">
+                      <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
+                      {frequencyText}
+                    </span>
                   </div>
                 </div>
               );
