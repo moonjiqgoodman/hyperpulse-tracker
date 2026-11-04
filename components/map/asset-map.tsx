@@ -12,7 +12,6 @@ interface AssetMapProps {
   registeredDevices?: any[];
 }
 
-// Distinct color progression array for waypoints
 const WAYPOINT_COLORS = [
   '#3b82f6', // 1: Blue
   '#6366f1', // 2: Indigo
@@ -25,28 +24,24 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
-  const markersRef = useRef<{ [key: number]: any }>({}); // Store marker references for clicking
+  const markersRef = useRef<{ [key: number]: any }>({});
   const [, setTick] = useState(0);
   const [isClient, setIsClient] = useState(false);
 
-  // Ensure this code only runs on the client browser
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Force re-render every minute to keep the "X ago" text live and fresh
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  // Helper to resolve Terminal ID to friendly Device Name
   const getDeviceName = (terminalId: string) => {
-    const found = registeredDevices.find(d => d.terminal_id === terminalId);
+    const found = registeredDevices.find(d => String(d.terminal_id).trim() === String(terminalId).trim());
     return found ? found.device_name : terminalId;
   };
 
-  // Helper to normalize timestamps consistently to UTC
   const getNormalizedDate = (dateString: string) => {
     if (!dateString) return new Date(0);
     try {
@@ -59,7 +54,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Helper to calculate "X ago" time difference relative to now
   const getTimeAgo = (dateString: string) => {
     if (!dateString) return 'Unknown';
     try {
@@ -80,12 +74,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Helper to format timestamp using Malaysia Time (GMT+8)
   const formatToMalaysiaTime = (log: any) => {
     if (log.timestamp_my) {
       return `${log.timestamp_my} (GMT+8)`;
     }
-    
     if (!log.recorded_at) return 'N/A';
     try {
       const date = getNormalizedDate(log.recorded_at);
@@ -106,7 +98,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Helper to calculate Battery Percentage for 2x AA Energizer Ultimate Lithium in Series
   const getBatteryStats = (voltage: number | null | undefined) => {
     if (voltage === null || voltage === undefined || isNaN(voltage)) {
       return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
@@ -131,10 +122,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       color = 'text-emerald-500';
     }
 
-    return { percent, text: `${percent}% (${voltage.toFixed(2)}V)`, color, icon };
+    return { percent, text: `${percent}% (${Number(voltage).toFixed(2)}V)`, color, icon };
   };
 
-  // 1. Initialize the Leaflet map once on mount (Client-side only)
   useEffect(() => {
     if (!isClient || !mapContainerRef.current || mapRef.current) return;
 
@@ -147,7 +137,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         scrollWheelZoom: false,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}	/{x}/{y}.png', {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
@@ -169,7 +159,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     };
   }, [isClient]);
 
-  // 2. Render trail and numbered waypoints whenever devices or selectedDevice changes
   useEffect(() => {
     if (!isClient) return;
     const map = mapRef.current;
@@ -178,7 +167,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
     import('leaflet').then((L) => {
       layerGroup.clearLayers();
-      markersRef.current = {}; // Reset marker refs
+      markersRef.current = {};
 
       if (!Array.isArray(devices) || devices.length === 0) return;
 
@@ -245,14 +234,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           `<div style="font-size: 12px; line-height: 1.4;">
              <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
              Device Name: <b>${deviceName}</b><br />
-             Battery: <b>${batteryInfo.percent}% (${log.battery_voltage ? Number(log.battery_voltage).toFixed(2) + 'V' : 'N/A'})</b><br />
+             Battery: <b>${batteryInfo.text}</b><br />
              Address: ${log.address || 'N/A'}<br />
              Time: ${convertedTime} (${timeAgo})
            </div>`
         );
 
         layerGroup.addLayer(marker);
-        markersRef.current[waypointNumber] = marker; // Save reference for click-to-zoom
+        markersRef.current[waypointNumber] = marker;
 
         if (isLatest) {
           marker.openPopup();
@@ -267,16 +256,17 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
   const terminalLogs = devices.filter((item: any) => item.terminal_id === targetTerminal);
+  
+  // FIX: Explicitly target the latest log (last item in sorted array) for summary info & address
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
 
-  // Handler to zoom in close to a specific waypoint when clicked in the legend
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
     const map = mapRef.current;
     if (!map) return;
 
-    map.setView([lat, lng], 17, { animate: true }); // Zoom level 17 is very close
+    map.setView([lat, lng], 17, { animate: true });
 
     const marker = markersRef.current[waypointNum];
     if (marker) {
@@ -286,25 +276,47 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   return (
     <div className="space-y-4">
-      {/* Interactive Clickable Waypoint Route Legend Bar Above Map */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-card border border-border px-3.5 py-2 rounded-lg text-xs">
-        <span className="font-semibold text-muted-foreground">Waypoint:</span>
-        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+      {/* Redesigned Flowchart Waypoint Template Bar: (1) ---- (2) ---- (3) */}
+      <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
+        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
+          <span>Waypoint Flowchart Sequence (Click to Focus):</span>
+          <span className="font-mono">{terminalLogs.length} Waypoints</span>
+        </div>
+        
+        <div className="flex items-center overflow-x-auto py-2 px-1 gap-1 no-scrollbar">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
             const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
             const waypointNum = idx + 1;
+
             return (
-              <button
-                key={idx}
-                onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
-                className="flex items-center gap-1.5 font-mono bg-background hover:bg-muted px-2 py-1 rounded border border-border transition-colors cursor-pointer shadow-2xs"
-                title={`Zoom to Waypoint #${waypointNum}`}
-              >
-                <span className="h-2.5 w-2.5 rounded-full inline-block shadow-xs" style={{ backgroundColor: color }} />
-                <span className="font-bold">#{waypointNum}</span>
-                {isLast && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-medium">(Latest)</span>}
-              </button>
+              <React.Fragment key={idx}>
+                {idx > 0 && (
+                  <div className="flex items-center text-muted-foreground/40 font-mono px-1 select-none">
+                    ----
+                  </div>
+                )}
+                <button
+                  onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
+                  className="group flex items-center gap-2 bg-background hover:bg-muted/80 border border-border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0"
+                  title={`Focus on Waypoint #${waypointNum}`}
+                >
+                  <span 
+                    className="h-5 w-5 rounded-full text-white flex items-center justify-center font-bold text-[10px] shadow-xs"
+                    style={{ backgroundColor: color }}
+                  >
+                    {waypointNum}
+                  </span>
+                  <div className="text-left font-mono">
+                    <div className="text-[11px] font-bold text-foreground group-hover:text-primary transition-colors">
+                      ({waypointNum}) {isLast ? 'Latest' : `Step ${waypointNum}`}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground">
+                      {getTimeAgo(log.recorded_at || log.timestamp_my)}
+                    </div>
+                  </div>
+                </button>
+              </React.Fragment>
             );
           })}
         </div>

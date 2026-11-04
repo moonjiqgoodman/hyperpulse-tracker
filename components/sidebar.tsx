@@ -15,6 +15,7 @@ interface DeviceLog {
   longitude: number;
   address: string;
   recorded_at: string;
+  timestamp_my?: string;
 }
 
 interface SidebarProps {
@@ -97,11 +98,31 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  const formatToMalaysiaTime = (dateString: string) => {
-    if (!dateString) return 'N/A';
+  // Helper to format Malaysia time correctly utilizing timestamp_my or fallback parsing
+  const formatToMalaysiaTime = (device: any) => {
+    // If backend provided timestamp_my string (e.g. "2026-11-04 11:10:53")
+    if (device.timestamp_my) {
+      try {
+        const parts = device.timestamp_my.split(/[- :]/);
+        if (parts.length >= 5) {
+          const year = parts[0];
+          const monthIndex = parseInt(parts[1], 10) - 1;
+          const day = parts[2];
+          const hour = parts[3];
+          const minute = parts[4];
+          
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${day} ${months[monthIndex]} ${year}, ${hour}:${minute}`;
+        }
+      } catch (e) {
+        // Fallthrough to standard formatter
+      }
+    }
+
+    if (!device.recorded_at) return 'N/A';
     try {
-      const date = getNormalizedDate(dateString);
-      if (isNaN(date.getTime())) return dateString;
+      const date = getNormalizedDate(device.recorded_at);
+      if (isNaN(date.getTime())) return device.recorded_at;
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -113,7 +134,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         hour12: false,
       }).format(date);
     } catch (e) {
-      return dateString;
+      return device.recorded_at;
     }
   };
 
@@ -193,8 +214,8 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             filteredDevices.map((device) => {
               const online = isOnline(device.recorded_at);
               const isSelected = selectedDevice === device.terminal_id;
-              const timeAgoText = getTimeAgo(device.recorded_at);
-              const malaysiaTimeText = formatToMalaysiaTime(device.recorded_at);
+              const timeAgoText = getTimeAgo(device.recorded_at || device.timestamp_my);
+              const malaysiaTimeText = formatToMalaysiaTime(device);
               const friendlyName = deviceNames[device.terminal_id];
 
               return (

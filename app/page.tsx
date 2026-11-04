@@ -15,6 +15,8 @@ interface TelemetryLog {
   longitude: number;
   address: string;
   recorded_at: string;
+  timestamp_my?: string;
+  battery_voltage?: number;
 }
 
 interface RegisteredDevice {
@@ -27,10 +29,11 @@ export default function DashboardPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [devices, setDevices] = useState<TelemetryLog[]>([]);
+  const [registeredDevices, setRegisteredDevices] = useState<RegisteredDevice[]>([]);
   const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [, setLoading] = useState<boolean>(true);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState<boolean>(false);
   
@@ -83,7 +86,7 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  // Fetch telemetry logs and device names mapping
+  // Fetch telemetry logs and registered devices array
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -101,6 +104,7 @@ export default function DashboardPage() {
 
         const deviceData = await deviceRes.json();
         if (deviceData.registered) {
+          setRegisteredDevices(deviceData.registered);
           const map: Record<string, string> = {};
           deviceData.registered.forEach((d: RegisteredDevice) => {
             map[d.terminal_id] = d.device_name;
@@ -212,7 +216,7 @@ export default function DashboardPage() {
         </header>
 
         <div className="flex-1 bg-background p-6 overflow-y-auto">
-          <AssetMap devices={devices} selectedDevice={selectedDevice} />
+          <AssetMap devices={devices} selectedDevice={selectedDevice} registeredDevices={registeredDevices} />
         </div>
       </main>
     </div>
