@@ -57,9 +57,15 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
+  // Helper to normalize timestamps correctly with Malaysia Time (GMT+8) offset support
   const getNormalizedDate = (dateString: string) => {
     if (!dateString) return new Date(0);
     try {
+      // If it's timestamp_my (e.g. "2026-11-04 14:40:43"), append explicit Malaysia offset +08:00
+      if (!dateString.includes('+') && !dateString.endsWith('Z')) {
+        return new Date(dateString.replace(' ', 'T') + '+08:00');
+      }
+      
       const normalizedString = dateString.endsWith('Z') || dateString.includes('+') 
         ? dateString 
         : dateString.replace(' ', 'T') + 'Z';
@@ -191,7 +197,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const terminalLogs = devices
         .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-        .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
+        .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
 
       if (terminalLogs.length === 0) return;
 
@@ -220,7 +226,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const deviceName = getDeviceName(log.terminal_id);
 
         const convertedTime = formatToMalaysiaTime(log);
-        const timeAgo = getTimeAgo(log.recorded_at || log.timestamp_my);
+        const timeAgo = getTimeAgo(log.timestamp_my || log.recorded_at);
         const batteryInfo = getBatteryStats(log.battery_voltage);
 
         const customIcon = L.divIcon({
@@ -272,7 +278,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   
   const terminalLogs = devices
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
+    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
   
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
@@ -412,7 +418,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                       {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {getTimeAgo(log.recorded_at || log.timestamp_my)}
+                      {getTimeAgo(log.timestamp_my || log.recorded_at)}
                     </div>
                   </div>
                 </button>
@@ -470,7 +476,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <div>
               <span className="text-muted-foreground/80">Last Updated (MYT):</span>{' '}
               <span className="font-bold text-foreground">
-                {formatToMalaysiaTime(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.recorded_at || latestLog.timestamp_my)})</span>
+                {formatToMalaysiaTime(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.timestamp_my || latestLog.recorded_at)})</span>
               </span>
             </div>
           </div>

@@ -60,12 +60,17 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(timer);
   }, []);
 
-  const getNormalizedDate = (recordedAt: string) => {
-    if (!recordedAt) return new Date(0);
+  const getNormalizedDate = (dateString: string) => {
+    if (!dateString) return new Date(0);
     try {
-      const normalizedString = recordedAt.endsWith('Z') || recordedAt.includes('+') 
-        ? recordedAt 
-        : recordedAt.replace(' ', 'T') + 'Z';
+      // If it lacks a timezone/offset, explicitly append Malaysia offset +08:00
+      if (!dateString.includes('+') && !dateString.endsWith('Z')) {
+        return new Date(dateString.replace(' ', 'T') + '+08:00');
+      }
+
+      const normalizedString = dateString.endsWith('Z') || dateString.includes('+') 
+        ? dateString 
+        : dateString.replace(' ', 'T') + 'Z';
       return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
@@ -101,9 +106,10 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
 
   // Helper to format Malaysia time correctly utilizing timestamp_my or fallback parsing
   const formatToMalaysiaTime = (device: any) => {
-    if (device.timestamp_my) {
+    const targetTimeStr = device.timestamp_my || device.recorded_at;
+    if (targetTimeStr) {
       try {
-        const parts = device.timestamp_my.split(/[- :]/);
+        const parts = targetTimeStr.split(/[- :]/);
         if (parts.length >= 5) {
           const year = parts[0];
           const monthIndex = parseInt(parts[1], 10) - 1;
@@ -147,7 +153,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const deviceList = Array.from(uniqueDevicesMap.values());
 
   const filteredDevices = deviceList.filter((device) => {
-    const online = isOnline(device.recorded_at || device.timestamp_my);
+    const online = isOnline(device.timestamp_my || device.recorded_at);
     if (filter === 'ONLINE') return online;
     if (filter === 'OFFLINE') return !online;
     return true;
@@ -212,9 +218,9 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </div>
           ) : (
             filteredDevices.map((device) => {
-              const online = isOnline(device.recorded_at || device.timestamp_my);
+              const online = isOnline(device.timestamp_my || device.recorded_at);
               const isSelected = selectedDevice === device.terminal_id;
-              const timeAgoText = getTimeAgo(device.recorded_at || device.timestamp_my);
+              const timeAgoText = getTimeAgo(device.timestamp_my || device.recorded_at);
               const malaysiaTimeText = formatToMalaysiaTime(device);
               const friendlyName = deviceNames[device.terminal_id];
 
