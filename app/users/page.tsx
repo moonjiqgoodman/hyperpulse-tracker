@@ -1,7 +1,7 @@
 // app/users/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -19,7 +19,9 @@ import {
   faShareNodes,
   faCopy,
   faShieldHalved,
-  faBars
+  faBars,
+  faChevronDown,
+  faUserCircle
 } from '@fortawesome/free-solid-svg-icons';
 import Sidebar from '@/components/sidebar';
 
@@ -55,7 +57,9 @@ export default function UserManagementPage() {
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState<boolean>(false);
+  
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -77,6 +81,17 @@ export default function UserManagementPage() {
       setIsDarkMode(true);
       root.classList.add('dark');
     }
+  }, []);
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const toggleTheme = () => {
@@ -217,7 +232,6 @@ export default function UserManagementPage() {
     );
   }
 
-  // Find logged in user info from list if available
   const loggedInUserObj = users.find(u => u.email.toLowerCase() === currentUserEmail?.toLowerCase());
   const isActorSeniorAdmin = loggedInUserObj ? loggedInUserObj.id === 1 : false;
 
@@ -233,9 +247,8 @@ export default function UserManagementPage() {
 
       <main className="flex-1 h-full overflow-y-auto flex flex-col">
         {/* Top Header Bar */}
-<header className="h-14 border-b border-border bg-card/30 backdrop-blur px-4 md:px-6 flex items-center justify-between shrink-0 z-10">
+        <header className="h-14 border-b border-border bg-card/30 backdrop-blur px-4 md:px-6 flex items-center justify-between shrink-0 z-10">
           <div className="flex items-center gap-3">
-            {/* Mobile Hamburger Menu Button */}
             <button
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
               className="md:hidden h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer"
@@ -250,7 +263,7 @@ export default function UserManagementPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={toggleTheme}
               className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"
@@ -259,14 +272,34 @@ export default function UserManagementPage() {
               <FontAwesomeIcon icon={isDarkMode ? faSun : faMoon} className="h-3.5 w-3.5" />
             </button>
 
-            <button
-              onClick={handleLogout}
-              className="h-8 px-2.5 flex items-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 transition-colors cursor-pointer shrink-0"
-              title="Sign Out"
-            >
-              <FontAwesomeIcon icon={faRightFromBracket} className="h-3 w-3" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </button>
+            {/* Profile Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="h-8 px-2.5 flex items-center gap-2 rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer text-xs font-medium"
+              >
+                <FontAwesomeIcon icon={faUserCircle} className="h-3.5 w-3.5 text-primary" />
+                <span className="hidden sm:inline font-mono truncate max-w-[150px]">{currentUserEmail || 'Account'}</span>
+                <FontAwesomeIcon icon={faChevronDown} className="h-2.5 w-2.5 opacity-60" />
+              </button>
+
+              {isProfileDropdownOpen && (
+                <div className="absolute right-0 mt-1.5 w-56 rounded-lg border border-border bg-card shadow-lg py-1.5 z-50 text-xs animate-in fade-in-50 zoom-in-95">
+                  <div className="px-3 py-2 border-b border-border mb-1">
+                    <p className="text-[10px] text-muted-foreground">Signed in as</p>
+                    <p className="font-mono font-bold truncate text-foreground">{currentUserEmail}</p>
+                  </div>
+                  
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-3 py-2 text-left flex items-center gap-2 text-destructive hover:bg-destructive/10 transition-colors cursor-pointer font-medium"
+                  >
+                    <FontAwesomeIcon icon={faRightFromBracket} className="h-3 w-3" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -327,7 +360,7 @@ export default function UserManagementPage() {
             </div>
           )}
 
-          {/* Section 1: Add New User Form */}
+          {/* Add New User Form */}
           <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -350,9 +383,9 @@ export default function UserManagementPage() {
                 <div>
                   <label className="block text-[11px] font-medium text-muted-foreground mb-1">Initial Password</label>
                   <input
-                    type="text"
+                    type="password"
                     required
-                    placeholder="****************"
+                    placeholder="**************"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-background text-xs text-foreground px-3 py-2 rounded-md border border-input focus:outline-none focus:ring-1 focus:ring-ring font-mono"
@@ -371,7 +404,7 @@ export default function UserManagementPage() {
             </form>
           </div>
 
-          {/* Section 2: Existing Users List */}
+          {/* Existing Users List */}
           <div className="space-y-2 pt-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -392,9 +425,6 @@ export default function UserManagementPage() {
                   {users.map((user) => {
                     const isSeniorAdmin = user.id === 1;
                     const isSelf = user.email.toLowerCase() === currentUserEmail?.toLowerCase();
-                    // Restriction rules: 
-                    // 1. Cannot reset or delete own account.
-                    // 2. Only Senior Admin (ID 1) can perform actions on others.
                     const canModify = isActorSeniorAdmin && !isSelf;
 
                     return (
@@ -423,7 +453,6 @@ export default function UserManagementPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {/* Reset Password Button */}
                           <button
                             onClick={() => handleResetPassword(user.id, user.email)}
                             disabled={!canModify}
@@ -432,13 +461,12 @@ export default function UserManagementPage() {
                                 ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border border-border'
                                 : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer'
                             }`}
-                            title={isSelf ? "You cannot reset your own password here" : (!isActorSeniorAdmin ? "Only ID 1 can reset passwords" : "Reset password to random string")}
+                            title={isSelf ? "You cannot reset your own password here" : (!isActorSeniorAdmin ? "Only ID 1 can reset passwords" : "Reset password")}
                           >
                             <FontAwesomeIcon icon={faKey} className="h-3 w-3" />
                             <span>Reset Password</span>
                           </button>
 
-                          {/* Delete Button */}
                           <button
                             onClick={() => handleDeleteUser(user.id, user.email)}
                             disabled={!canModify || isSeniorAdmin}
@@ -447,7 +475,7 @@ export default function UserManagementPage() {
                                 ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border border-border' 
                                 : 'bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 cursor-pointer'
                             }`}
-                            title={isSelf ? "You cannot delete your own account" : (isSeniorAdmin ? "Senior admin account cannot be deleted" : (!isActorSeniorAdmin ? "Only ID 1 can delete accounts" : "Delete account"))}
+                            title={isSelf ? "You cannot delete your own account" : (isSeniorAdmin ? "Senior admin account cannot be deleted" : "Delete account")}
                           >
                             <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                             <span>Delete</span>

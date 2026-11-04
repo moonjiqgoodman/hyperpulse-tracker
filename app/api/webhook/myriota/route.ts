@@ -11,6 +11,8 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+const VALID_CERT_URL = "https://security.myriota.com/data-13f7751f3c5df569a6c9c42a9ce73a8a.crt";
+
 async function getAddressFromCoords(lat: number, lng: number) {
   if (lat === 0 && lng === 0) return "Unknown Location";
   try {
@@ -29,6 +31,12 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
     console.log('REC Payload:', JSON.stringify(payload, null, 2));
+
+    // 1. Strict Certificate URL Validation
+    if (payload.CertificateUrl !== VALID_CERT_URL) {
+      console.warn(`[Security Warning] Rejected payload with invalid or missing CertificateUrl: ${payload.CertificateUrl}`);
+      return NextResponse.json({ status: 'error', message: 'Invalid or unauthorized CertificateUrl' }, { status: 403 });
+    }
 
     let parsedData = payload;
 
@@ -63,22 +71,28 @@ export async function POST(request: Request) {
 
     const lat = parseFloat(dataObj?.latitude || dataObj?.lat || 0);
     const lng = parseFloat(dataObj?.longitude || dataObj?.lng || dataObj?.lon || 0);
+    const batteryVoltage = dataObj?.battery_voltage !== undefined ? parseFloat(dataObj.battery_voltage) : null;
 
     const currentAddress = await getAddressFromCoords(lat, lng);
     
     const rawTime = packet.Timestamp || dataObj?.time;
-    const timestamp = rawTime
-      ? new Date(rawTime * (String(rawTime).length === 10 ? 1000 : 1)).toISOString().slice(0, 19).replace('T', ' ')
-      : new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const epochMs = rawTime ? rawTime * (String(rawTime).length === 10 ? 1000 : 1) : Date.now();
+
+    // Standard UTC Timestamp string
+    const timestampUtc = new Date(epochMs).toISOString().slice(0, 19).replace('T', ' ');
+
+    // Malaysia Time (UTC+8) Calculation (+8 hours in milliseconds)
+    const mytDate = new Date(epochMs + (8 * 60 * 60 * 1000));
+    const timestampMy = mytDate.toISOString().slice(0, 19).replace('T', ' ');
 
     const query = `
-      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, address, recorded_at) 
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, address, battery_voltage, recorded_at, timestamp_my) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    await pool.execute(query, [terminalId, lat, lng, currentAddress, timestamp]);
+    await pool.execute(query, [terminalId, lat, lng, currentAddress, batteryVoltage, timestampUtc, timestampMy]);
 
-    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}`);
-    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng }, { status: 200 });
+    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}, Battery: ${batteryVoltage}V, MYT: ${timestampMy}`);
+    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, batteryVoltage, timestampMy }, { status: 200 });
 
   } catch (error) {
     console.error('Database save error:', error);

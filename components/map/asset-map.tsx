@@ -3,16 +3,29 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
   selectedDevice?: string | null;
+  registeredDevices?: any[];
 }
 
-export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps) {
+// Distinct color progression array for waypoints
+const WAYPOINT_COLORS = [
+  '#3b82f6', // 1: Blue
+  '#6366f1', // 2: Indigo
+  '#8b5cf6', // 3: Purple
+  '#ec4899', // 4: Pink
+  '#f97316', // 5: Orange
+];
+
+export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [] }: AssetMapProps) {
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
+  const markersRef = useRef<{ [key: number]: any }>({}); // Store marker references for clicking
   const [, setTick] = useState(0);
   const [isClient, setIsClient] = useState(false);
 
@@ -26,6 +39,12 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
     const timer = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Helper to resolve Terminal ID to friendly Device Name
+  const getDeviceName = (terminalId: string) => {
+    const found = registeredDevices.find(d => d.terminal_id === terminalId);
+    return found ? found.device_name : terminalId;
+  };
 
   // Helper to normalize timestamps consistently to UTC
   const getNormalizedDate = (dateString: string) => {
@@ -61,12 +80,16 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
     }
   };
 
-  // Helper to convert UTC timestamp string to GMT+8 (Malaysia Time) formatted string
-  const formatToMalaysiaTime = (dateString: string) => {
-    if (!dateString) return 'N/A';
+  // Helper to format timestamp using Malaysia Time (GMT+8)
+  const formatToMalaysiaTime = (log: any) => {
+    if (log.timestamp_my) {
+      return `${log.timestamp_my} (GMT+8)`;
+    }
+    
+    if (!log.recorded_at) return 'N/A';
     try {
-      const date = getNormalizedDate(dateString);
-      if (isNaN(date.getTime())) return dateString;
+      const date = getNormalizedDate(log.recorded_at);
+      if (isNaN(date.getTime())) return log.recorded_at;
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -79,8 +102,36 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
         hour12: false,
       }).format(date) + ' (GMT+8)';
     } catch (e) {
-      return dateString;
+      return log.recorded_at;
     }
+  };
+
+  // Helper to calculate Battery Percentage for 2x AA Energizer Ultimate Lithium in Series
+  const getBatteryStats = (voltage: number | null | undefined) => {
+    if (voltage === null || voltage === undefined || isNaN(voltage)) {
+      return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
+    }
+
+    const minV = 2.0; 
+    const maxV = 3.4; 
+    const rawPct = ((voltage - minV) / (maxV - minV)) * 100;
+    const percent = Math.max(0, Math.min(100, Math.round(rawPct)));
+
+    let icon = faBatteryFull;
+    let color = 'text-emerald-500';
+
+    if (percent <= 20) {
+      icon = faBatteryEmpty;
+      color = 'text-destructive';
+    } else if (percent <= 50) {
+      icon = faBatteryHalf;
+      color = 'text-amber-500';
+    } else if (percent <= 80) {
+      icon = faBatteryThreeQuarters;
+      color = 'text-emerald-500';
+    }
+
+    return { percent, text: `${percent}% (${voltage.toFixed(2)}V)`, color, icon };
   };
 
   // 1. Initialize the Leaflet map once on mount (Client-side only)
@@ -91,12 +142,12 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
       if (!mapContainerRef.current || mapRef.current) return;
 
       const map = L.map(mapContainerRef.current, {
-        center: [4.6097, 101.0758],
-        zoom: 5,
+        center: [3.1390, 101.6869],
+        zoom: 6,
         scrollWheelZoom: false,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}	/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
@@ -127,6 +178,7 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
 
     import('leaflet').then((L) => {
       layerGroup.clearLayers();
+      markersRef.current = {}; // Reset marker refs
 
       if (!Array.isArray(devices) || devices.length === 0) return;
 
@@ -134,7 +186,7 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
 
       const terminalLogs = devices
         .filter((item: any) => item.terminal_id === targetTerminal)
-        .sort((a: any, b: any) => getNormalizedDate(a.recorded_at).getTime() - getNormalizedDate(b.recorded_at).getTime());
+        .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
 
       if (terminalLogs.length === 0) return;
 
@@ -157,14 +209,19 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
         const lng = parseFloat(log.longitude);
         const isLatest = index === terminalLogs.length - 1;
         const waypointNumber = index + 1;
-        const convertedTime = formatToMalaysiaTime(log.recorded_at);
-        const timeAgo = getTimeAgo(log.recorded_at);
+        
+        const markerColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[index % WAYPOINT_COLORS.length];
+        const deviceName = getDeviceName(log.terminal_id);
+
+        const convertedTime = formatToMalaysiaTime(log);
+        const timeAgo = getTimeAgo(log.recorded_at || log.timestamp_my);
+        const batteryInfo = getBatteryStats(log.battery_voltage);
 
         const customIcon = L.divIcon({
           className: 'custom-waypoint-badge',
           html: `
             <div style="
-              background-color: ${isLatest ? '#16a34a' : '#2563eb'};
+              background-color: ${markerColor};
               color: white;
               width: 28px;
               height: 28px;
@@ -187,13 +244,15 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(
           `<div style="font-size: 12px; line-height: 1.4;">
              <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
-             Terminal: ${log.terminal_id}<br />
+             Device Name: <b>${deviceName}</b><br />
+             Battery: <b>${batteryInfo.percent}% (${log.battery_voltage ? Number(log.battery_voltage).toFixed(2) + 'V' : 'N/A'})</b><br />
              Address: ${log.address || 'N/A'}<br />
-             Time (GMT+8): ${convertedTime} (${timeAgo})
+             Time: ${convertedTime} (${timeAgo})
            </div>`
         );
 
         layerGroup.addLayer(marker);
+        markersRef.current[waypointNumber] = marker; // Save reference for click-to-zoom
 
         if (isLatest) {
           marker.openPopup();
@@ -204,14 +263,53 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
         map.fitBounds(dashedPolyline.getBounds(), { padding: [50, 50] });
       }
     });
-  }, [devices, selectedDevice, isClient]);
+  }, [devices, selectedDevice, registeredDevices, isClient]);
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
   const terminalLogs = devices.filter((item: any) => item.terminal_id === targetTerminal);
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
+  const latestBattery = getBatteryStats(latestLog?.battery_voltage);
+  const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
+
+  // Handler to zoom in close to a specific waypoint when clicked in the legend
+  const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.setView([lat, lng], 17, { animate: true }); // Zoom level 17 is very close
+
+    const marker = markersRef.current[waypointNum];
+    if (marker) {
+      marker.openPopup();
+    }
+  };
 
   return (
     <div className="space-y-4">
+      {/* Interactive Clickable Waypoint Route Legend Bar Above Map */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-card border border-border px-3.5 py-2 rounded-lg text-xs">
+        <span className="font-semibold text-muted-foreground">Waypoint:</span>
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+          {terminalLogs.map((log: any, idx: number) => {
+            const isLast = idx === terminalLogs.length - 1;
+            const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
+            const waypointNum = idx + 1;
+            return (
+              <button
+                key={idx}
+                onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
+                className="flex items-center gap-1.5 font-mono bg-background hover:bg-muted px-2 py-1 rounded border border-border transition-colors cursor-pointer shadow-2xs"
+                title={`Zoom to Waypoint #${waypointNum}`}
+              >
+                <span className="h-2.5 w-2.5 rounded-full inline-block shadow-xs" style={{ backgroundColor: color }} />
+                <span className="font-bold">#{waypointNum}</span>
+                {isLast && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-medium">(Latest)</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div 
         ref={mapContainerRef} 
         className="w-full rounded-xl overflow-hidden shadow-sm border border-border z-0" 
@@ -223,10 +321,17 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
           No waypoints found. Select a device from the sidebar or wait for incoming packets.
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground bg-muted p-3.5 rounded-lg space-y-2 border border-border">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2">
+        <div className="text-xs text-muted-foreground bg-muted p-3.5 rounded-lg space-y-2 border border-border relative">
+          {/* iPhone-style Battery Indicator at Top Right Corner */}
+          <div className="absolute top-3.5 right-4 flex items-center gap-1.5 bg-background/80 backdrop-blur px-2.5 py-1 rounded-full border border-border shadow-xs font-mono">
+            <FontAwesomeIcon icon={latestBattery.icon} className={`h-3.5 w-3.5 ${latestBattery.color}`} />
+            <span className="font-bold text-foreground">{latestBattery.percent}%</span>
+            <span className="text-[10px] text-muted-foreground">({latestLog.battery_voltage ? `${Number(latestLog.battery_voltage).toFixed(2)}V` : 'N/A'})</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2 pr-36">
             <div>
-              Active Terminal: <span className="font-bold text-foreground">{targetTerminal}</span>
+              Device Name: <span className="font-bold text-foreground">{activeDeviceName}</span>
             </div>
             <div>
               Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
@@ -238,9 +343,9 @@ export default function AssetMap({ devices = [], selectedDevice }: AssetMapProps
               <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
             </div>
             <div>
-              <span className="text-muted-foreground/80">Last Updated (GMT+8):</span>{' '}
+              <span className="text-muted-foreground/80">Last Updated (MYT):</span>{' '}
               <span className="font-bold text-foreground">
-                {formatToMalaysiaTime(latestLog.recorded_at)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.recorded_at)})</span>
+                {formatToMalaysiaTime(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.recorded_at || latestLog.timestamp_my)})</span>
               </span>
             </div>
           </div>
