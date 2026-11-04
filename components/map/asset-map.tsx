@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -104,7 +104,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
     }
 
-    // 2x AA Energizer Ultimate Lithium: Min ~2.0V, Max ~3.4V
     const minV = 2.0; 
     const maxV = 3.4; 
     const rawPct = ((voltage - minV) / (maxV - minV)) * 100;
@@ -270,7 +269,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const map = mapRef.current;
     if (!map) return;
 
-    map.setView([lat, lng], 17, { animate: true });
+    map.setView([lat, lng], 18, { animate: true });
 
     const marker = markersRef.current[waypointNum];
     if (marker) {
@@ -278,16 +277,57 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
+  // Export all telemetry logs for this device to Excel (.csv)
+  const handleExportExcel = () => {
+    if (!terminalLogs || terminalLogs.length === 0) return;
+
+    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Battery Voltage (V)', 'Malaysia Time (MYT)', 'UTC Time', 'Address'];
+    
+    const rows = terminalLogs.map((log: any, idx: number) => {
+      const devName = getDeviceName(log.terminal_id);
+      const lat = log.latitude;
+      const lng = log.longitude;
+      const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? log.battery_voltage : 'N/A';
+      const myt = log.timestamp_my || 'N/A';
+      const utc = log.recorded_at || 'N/A';
+      const addr = `"${(log.address || '').replace(/"/g, '""')}"`; // Escape quotes for CSV
+
+      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, batt, `"${myt}"`, `"${utc}"`, addr].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${activeDeviceName.replace(/[^a-zA-Z0-9]/g, '_')}_telemetry_history.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Scrollable Flowchart Sequence Bar: (1) ---- (2) ---- (3) */}
+      {/* Scrollable Flowchart Sequence Bar & Export Button Header */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
-          <span>Waypoint::</span>
-          <span className="font-mono">{terminalLogs.length} Waypoints</span>
+          <span>Waypoint Flowchart Sequence (Click to Focus):</span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono">{terminalLogs.length} Waypoints</span>
+            {terminalLogs.length > 0 && (
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                title="Export all data of this device to Excel/CSV"
+              >
+                <FontAwesomeIcon icon={faFileExcel} className="h-3.5 w-3.5" />
+                <span>Export Excel</span>
+              </button>
+            )}
+          </div>
         </div>
         
-        {/* Enforced horizontal scrolling container */}
         <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
@@ -314,7 +354,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                   </span>
                   <div className="text-left font-mono">
                     <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                      {isLast ? 'Latest' : `Waypoint ${waypointNum}`}
+                      {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
                       {getTimeAgo(log.recorded_at || log.timestamp_my)}
@@ -339,7 +379,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       ) : (
         <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
-          {/* Bigger, Cleanly Aligned iPhone-style Battery Indicator at Top Right Corner */}
+          {/* Top Right Battery Indicator */}
           <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
