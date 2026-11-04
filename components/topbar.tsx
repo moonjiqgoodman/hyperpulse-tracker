@@ -1,4 +1,3 @@
-// components/map/topbar.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -39,7 +38,6 @@ export default function Topbar({ selectedDevice, onToggleSidebar }: TopbarProps)
   return (
     <header className="h-14 border-b border-border bg-card/30 backdrop-blur px-4 md:px-6 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3">
-        {/* Mobile Hamburger Menu Button */}
         <button
           onClick={onToggleSidebar}
           className="md:hidden h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer"
@@ -57,7 +55,6 @@ export default function Topbar({ selectedDevice, onToggleSidebar }: TopbarProps)
         </div>
       </div>
 
-      {/* Theme Toggle Button */}
       <button
         onClick={toggleTheme}
         className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"

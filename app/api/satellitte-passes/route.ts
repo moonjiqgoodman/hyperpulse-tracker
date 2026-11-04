@@ -5,7 +5,6 @@ export async function GET(request: Request) {
   const lat = searchParams.get('latitude') || '4.5975';
   const lng = searchParams.get('longitude') || '101.0901';
   
-  // Allow passing custom time_from or default to current Unix timestamp
   const nowUnix = Math.floor(Date.now() / 1000);
   const timeFrom = searchParams.get('time_from') || nowUnix.toString();
   const limit = searchParams.get('limit') || '50';

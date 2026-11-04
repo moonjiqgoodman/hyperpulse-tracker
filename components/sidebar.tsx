@@ -1,4 +1,3 @@
-// components/sidebar.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -32,7 +31,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const [, setTick] = useState(0);
   const pathname = usePathname();
 
-  // Fetch registered device names from database registry
   useEffect(() => {
     async function fetchDeviceRegistry() {
       try {
@@ -54,7 +52,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(interval);
   }, []);
 
-  // Force re-render every minute to keep time-ago fresh
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(timer);
@@ -63,7 +60,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const getNormalizedDate = (dateString: string) => {
     if (!dateString) return new Date(0);
     try {
-      // If it lacks a timezone/offset, explicitly append Malaysia offset +08:00
       if (!dateString.includes('+') && !dateString.endsWith('Z')) {
         return new Date(dateString.replace(' ', 'T') + '+08:00');
       }
@@ -77,7 +73,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  // Consider online if last update was within 24 hours (86400000 ms), otherwise offline
+
   const isOnline = (recordedAt: string) => {
     const lastSeen = getNormalizedDate(recordedAt).getTime();
     const now = new Date().getTime();
@@ -104,7 +100,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  // Helper to format Malaysia time correctly utilizing timestamp_my or fallback parsing
+
   const formatToMalaysiaTime = (device: any) => {
     const targetTimeStr = device.timestamp_my || device.recorded_at;
     if (targetTimeStr) {
@@ -121,7 +117,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           return `${day} ${months[monthIndex]} ${year}, ${hour}:${minute}`;
         }
       } catch (e) {
-        // Fallthrough to standard formatter
+       
       }
     }
 
@@ -173,7 +169,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         md:relative md:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        {/* Brand Header */}
         <div className="p-4 border-b border-border flex flex-col gap-3">
           <div className="flex flex-col items-center justify-center text-center gap-1.5 relative">
             <span className="absolute right-0 top-0 text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
@@ -210,7 +205,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           </div>
         </div>
 
-        {/* Device List Section */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
           {filteredDevices.length === 0 ? (
             <div className="text-center text-muted-foreground text-xs py-10">
@@ -274,7 +268,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           )}
         </div>
 
-        {/* Bottom Navigation & Management Links */}
         <div className="p-3 border-t border-border bg-card/50 flex flex-col gap-1.5 shrink-0">
           <Link
             href="/devices"

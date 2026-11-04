@@ -1,4 +1,3 @@
-// app/page.tsx
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -64,7 +63,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -86,7 +84,6 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  // Fetch telemetry logs and registered devices array
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -137,7 +134,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Determine display name for selected device (fallback to terminal_id if no name)
   const selectedDeviceName = selectedDevice 
     ? (deviceNames[selectedDevice] || selectedDevice) 
     : null;
@@ -173,9 +169,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right Actions: Theme Toggle & Account Profile Dropdown */}
           <div className="flex items-center gap-2.5">
-            {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
               className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"
@@ -184,7 +178,6 @@ export default function DashboardPage() {
               <FontAwesomeIcon icon={isDarkMode ? faSun : faMoon} className="h-3.5 w-3.5" />
             </button>
 
-            {/* Account Profile Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}

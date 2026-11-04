@@ -1,4 +1,3 @@
-// app/api/users/route.ts
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 import bcrypt from 'bcryptjs';
@@ -55,21 +54,18 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, message: 'Target user ID and actor email are required' }, { status: 400 });
     }
 
-    // Find actor in database
     const [actorRows]: any = await pool.query('SELECT * FROM users WHERE email = ?', [actorEmail.trim().toLowerCase()]);
     if (!actorRows || actorRows.length === 0) {
       return NextResponse.json({ success: false, message: 'Unauthorized actor' }, { status: 403 });
     }
     const actor = actorRows[0];
 
-    // Find target user
     const [targetRows]: any = await pool.query('SELECT * FROM users WHERE id = ?', [targetId]);
     if (!targetRows || targetRows.length === 0) {
       return NextResponse.json({ success: false, message: 'Target user not found' }, { status: 404 });
     }
     const target = targetRows[0];
 
-    // Rule: Only ID 1 can reset passwords, and CANNOT reset own password
     if (actor.id !== 1) {
       return NextResponse.json({ success: false, message: 'Permission denied: Only Senior Admin (ID 1) can reset passwords.' }, { status: 403 });
     }
@@ -102,21 +98,18 @@ export async function DELETE(request: Request) {
 
     const targetId = parseInt(targetIdStr, 10);
 
-    // Find actor in database
     const [actorRows]: any = await pool.query('SELECT * FROM users WHERE email = ?', [actorEmail.trim().toLowerCase()]);
     if (!actorRows || actorRows.length === 0) {
       return NextResponse.json({ success: false, message: 'Unauthorized actor' }, { status: 403 });
     }
     const actor = actorRows[0];
 
-    // Find target user
     const [targetRows]: any = await pool.query('SELECT * FROM users WHERE id = ?', [targetId]);
     if (!targetRows || targetRows.length === 0) {
       return NextResponse.json({ success: false, message: 'Target user not found' }, { status: 404 });
     }
     const target = targetRows[0];
 
-    // Rule: Only ID 1 can delete users, and CANNOT delete own account or ID 1
     if (actor.id !== 1) {
       return NextResponse.json({ success: false, message: 'Permission denied: Only Senior Admin (ID 1) can delete accounts.' }, { status: 403 });
     }

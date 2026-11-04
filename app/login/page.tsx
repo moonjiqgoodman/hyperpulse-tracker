@@ -1,4 +1,3 @@
-// app/login/page.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -18,7 +17,6 @@ export default function LoginPage() {
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  // DevTools inspection guard for password field
   useEffect(() => {
     const inputElement = passwordInputRef.current;
     if (!inputElement) return;
@@ -37,7 +35,6 @@ export default function LoginPage() {
     return () => observer.disconnect();
   }, [showPassword]);
 
-  // Theme initialization
   useEffect(() => {
     const root = document.documentElement;
     if (root.classList.contains('light')) {
@@ -93,7 +90,6 @@ export default function LoginPage() {
   return (
     <div className="relative flex h-screen w-screen items-center justify-center bg-background text-foreground font-sans px-4 select-none">
       
-      {/* Light / Dark Mode Toggle Button */}
       <button
         onClick={toggleTheme}
         className="absolute top-6 right-6 h-9 w-9 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted transition-colors cursor-pointer shadow-xs"
@@ -102,10 +98,8 @@ export default function LoginPage() {
         <FontAwesomeIcon icon={isDarkMode ? faSun : faMoon} className="h-4 w-4" />
       </button>
 
-      {/* Login Card */}
       <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm space-y-6">
         
-        {/* Brand Header */}
         <div className="flex flex-col items-center justify-center text-center gap-2">
           <div className="relative w-36 h-10 flex items-center justify-center">
             <Image 
@@ -121,7 +115,6 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           {error && (
             <div className="text-xs bg-destructive/10 text-destructive p-2.5 rounded-md border border-destructive/20 text-center">
@@ -172,8 +165,6 @@ export default function LoginPage() {
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
-
-        {/* Footer */}
         <div className="pt-4 border-t border-border text-center">
           <p className="text-[9px] font-mono text-muted-foreground tracking-wide">
             © IPINFRA NETWORKS SDN BHD

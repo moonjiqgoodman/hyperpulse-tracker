@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -14,11 +13,11 @@ interface AssetMapProps {
 }
 
 const WAYPOINT_COLORS = [
-  '#3b82f6', // 1: Blue
-  '#6366f1', // 2: Indigo
-  '#8b5cf6', // 3: Purple
-  '#ec4899', // 4: Pink
-  '#f97316', // 5: Orange
+  '#3b82f6',
+  '#6366f1',
+  '#8b5cf6', 
+  '#ec4899', 
+  '#f97316', 
 ];
 
 export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [], onDataReset }: AssetMapProps) {
@@ -33,7 +32,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [, setTick] = useState(0);
   const [isClient, setIsClient] = useState(false);
 
-  // Reset Modal State
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -57,11 +55,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  // Helper to normalize timestamps correctly with Malaysia Time (GMT+8) offset support
   const getNormalizedDate = (dateString: string) => {
     if (!dateString) return new Date(0);
     try {
-      // If it's timestamp_my (e.g. "2026-11-04 14:40:43"), append explicit Malaysia offset +08:00
       if (!dateString.includes('+') && !dateString.endsWith('Z')) {
         return new Date(dateString.replace(' ', 'T') + '+08:00');
       }
@@ -360,7 +356,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   return (
     <div className="space-y-4">
-      {/* Scrollable Flowchart Sequence Bar & Action Buttons */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
           <span>Waypoint:</span>
@@ -428,7 +423,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       </div>
 
-      {/* Map Container with Reset View Button Positioned at Bottom Right Above Map */}
       <div className="relative w-full rounded-xl overflow-hidden shadow-sm border border-border">
         <div 
           ref={mapContainerRef} 
@@ -436,7 +430,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           style={{ height: '450px', minHeight: '400px' }} 
         />
         
-        {/* Reset Map View Button (Bottom Right Above Map with White Text) */}
         <button
           onClick={handleResetMapView}
           className="absolute bottom-4 right-4 z-[400] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
@@ -453,7 +446,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       ) : (
         <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
-          {/* Top Right Battery Indicator */}
           <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
@@ -487,7 +479,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       )}
 
-      {/* Confirmation Modal */}
       {isResetModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in-50">
           <div className="bg-card border border-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-card-foreground">

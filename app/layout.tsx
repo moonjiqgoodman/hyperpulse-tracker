@@ -1,4 +1,3 @@
-// app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
@@ -16,7 +15,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// CHANGE THIS TO YOUR APP'S NAME
 export const metadata: Metadata = {
   title: "Hyperpulse - AssetHawk Tracker",
   description: "Real-time satellite tracking system",

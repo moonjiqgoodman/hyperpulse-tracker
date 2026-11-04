@@ -1,4 +1,3 @@
-// components/map/map-client.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -34,7 +33,6 @@ export default function MapClient() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const router = useRouter();
 
-  // 1. Check authentication on mount
   useEffect(() => {
     const auth = localStorage.getItem('isAuthenticated');
     if (!auth) {
@@ -45,7 +43,6 @@ export default function MapClient() {
     setIsCheckingAuth(false);
   }, [router]);
 
-  // 2. Fetch logs only if authenticated
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -66,7 +63,6 @@ export default function MapClient() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Prevent rendering dashboard elements while verifying login session
   if (isCheckingAuth || !isAuthenticated) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground font-sans">
@@ -77,7 +73,6 @@ export default function MapClient() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
-      {/* Sidebar Component with Mobile Drawer Props */}
       <Sidebar 
         devices={devices} 
         selectedDevice={selectedDevice} 
@@ -86,15 +81,12 @@ export default function MapClient() {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 h-full overflow-y-auto flex flex-col">
-        {/* External Topbar Component with Mobile Menu Toggle */}
         <Topbar 
           selectedDevice={selectedDevice} 
           onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} 
         />
 
-        {/* View Body */}
         <div className="flex-1 p-6 md:p-8 pt-6 space-y-4">
           <div className="flex items-center justify-between space-y-2">
             <h2 className="text-2xl font-bold tracking-tight">Asset Tracking</h2>

@@ -1,7 +1,6 @@
-// app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
-import bcrypt from 'bcryptjs'; // Make sure it's bcryptjs
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -28,7 +27,6 @@ export async function POST(request: Request) {
 
     const user = rows[0];
 
-    // Compare plain password with stored bcrypt hash
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (isPasswordValid) {
