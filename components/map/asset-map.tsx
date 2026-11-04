@@ -4,12 +4,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
   selectedDevice?: string | null;
   registeredDevices?: any[];
+  onDataReset?: () => void;
 }
 
 const WAYPOINT_COLORS = [
@@ -20,13 +21,21 @@ const WAYPOINT_COLORS = [
   '#f97316', // 5: Orange
 ];
 
-export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [] }: AssetMapProps) {
+export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [], onDataReset }: AssetMapProps) {
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
   const markersRef = useRef<{ [key: number]: any }>({});
+  const hasFittedBoundsRef = useRef(false); // Prevents map from resetting zoom on periodic data updates
+  const prevSelectedDeviceRef = useRef(selectedDevice);
+
   const [, setTick] = useState(0);
   const [isClient, setIsClient] = useState(false);
+
+  // Reset Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [confirmInput, setConfirmInput] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -36,6 +45,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const timer = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // If selected device changes, allow fitBounds to run once for the new device
+  if (prevSelectedDeviceRef.current !== selectedDevice) {
+    prevSelectedDeviceRef.current = selectedDevice;
+    hasFittedBoundsRef.current = false;
+  }
 
   const getDeviceName = (terminalId: string) => {
     const found = registeredDevices.find(d => String(d.terminal_id).trim() === String(terminalId).trim());
@@ -135,7 +150,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const map = L.map(mapContainerRef.current, {
         center: [3.1390, 101.6869],
         zoom: 6,
-        scrollWheelZoom: false,
+        scrollWheelZoom: true,
       });
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -243,14 +258,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
         layerGroup.addLayer(marker);
         markersRef.current[waypointNumber] = marker;
-
-        if (isLatest) {
-          marker.openPopup();
-        }
       });
 
-      if (latLngs.length > 0) {
+      // Only fit bounds on initial load/device switch so manual user panning/zooming is preserved
+      if (latLngs.length > 0 && !hasFittedBoundsRef.current) {
         map.fitBounds(dashedPolyline.getBounds(), { padding: [50, 50] });
+        hasFittedBoundsRef.current = true;
       }
     });
   }, [devices, selectedDevice, registeredDevices, isClient]);
@@ -264,6 +277,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
+  const expectedDeletePhrase = `DELETE DEVICE ${activeDeviceName}`;
 
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
     const map = mapRef.current;
@@ -277,7 +291,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Export all telemetry logs for this device to Excel (.csv)
   const handleExportExcel = () => {
     if (!terminalLogs || terminalLogs.length === 0) return;
 
@@ -290,7 +303,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? log.battery_voltage : 'N/A';
       const myt = log.timestamp_my || 'N/A';
       const utc = log.recorded_at || 'N/A';
-      const addr = `"${(log.address || '').replace(/"/g, '""')}"`; // Escape quotes for CSV
+      const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
 
       return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, batt, `"${myt}"`, `"${utc}"`, addr].join(',');
     });
@@ -307,23 +320,57 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     document.body.removeChild(link);
   };
 
+  const handleConfirmReset = async () => {
+    if (confirmInput !== expectedDeletePhrase || !targetTerminal) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/webhook/myriota?terminal_id=${encodeURIComponent(targetTerminal)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setIsResetModalOpen(false);
+        setConfirmInput('');
+        if (onDataReset) onDataReset();
+        window.location.reload();
+      } else {
+        alert('Failed to delete device data.');
+      }
+    } catch (err) {
+      console.error('Reset error:', err);
+      alert('An error occurred while deleting data.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Scrollable Flowchart Sequence Bar & Export Button Header */}
+      {/* Scrollable Flowchart Sequence Bar & Action Buttons */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
           <span>Waypoint Flowchart Sequence (Click to Focus):</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <span className="font-mono">{terminalLogs.length} Waypoints</span>
             {terminalLogs.length > 0 && (
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
-                title="Export all data of this device to Excel/CSV"
-              >
-                <FontAwesomeIcon icon={faFileExcel} className="h-3.5 w-3.5" />
-                <span>Export Excel</span>
-              </button>
+              <>
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                  title="Export all data to Excel"
+                >
+                  <FontAwesomeIcon icon={faFileExcel} className="h-3.5 w-3.5" />
+                  <span>Export</span>
+                </button>
+                <button
+                  onClick={() => { setConfirmInput(''); setIsResetModalOpen(true); }}
+                  className="flex items-center gap-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                  title="Reset / Delete all telemetry data"
+                >
+                  <FontAwesomeIcon icon={faTrashCan} className="h-3.5 w-3.5" />
+                  <span>Reset Data</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -409,6 +456,56 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           <div className="truncate pt-1.5 border-t border-border/60">
             <span className="text-muted-foreground/80">Last Address:</span>{' '}
             <span className="font-bold text-foreground">{latestLog.address || 'N/A'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in-50">
+          <div className="bg-card border border-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-card-foreground">
+            <div className="flex items-center gap-3 text-destructive">
+              <div className="p-3 bg-destructive/10 rounded-full">
+                <FontAwesomeIcon icon={faTriangleExclamation} className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold">Reset Device Telemetry Data</h3>
+                <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              You are about to permanently delete all telemetry history and waypoints for <strong className="text-foreground">{activeDeviceName}</strong>.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <label className="text-xs font-medium text-foreground block">
+                To confirm, type <span className="font-mono font-bold text-destructive select-all">{expectedDeletePhrase}</span> below:
+              </label>
+              <input
+                type="text"
+                value={confirmInput}
+                onChange={(e) => setConfirmInput(e.target.value)}
+                placeholder={expectedDeletePhrase}
+                className="w-full bg-background border border-input rounded-md px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-destructive"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
+              <button
+                onClick={() => setIsResetModalOpen(false)}
+                className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmReset}
+                disabled={confirmInput !== expectedDeletePhrase || isDeleting}
+                className="px-4 py-2 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
