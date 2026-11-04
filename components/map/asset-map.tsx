@@ -98,11 +98,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const getBatteryStats = (voltage: number | null | undefined) => {
-    if (voltage === null || voltage === undefined || isNaN(voltage)) {
+  const getBatteryStats = (voltageVal: any) => {
+    const voltage = voltageVal !== null && voltageVal !== undefined ? parseFloat(voltageVal) : NaN;
+    if (isNaN(voltage) || voltage <= 0) {
       return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
     }
 
+    // 2x AA Energizer Ultimate Lithium: Min ~2.0V, Max ~3.4V
     const minV = 2.0; 
     const maxV = 3.4; 
     const rawPct = ((voltage - minV) / (maxV - minV)) * 100;
@@ -122,7 +124,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       color = 'text-emerald-500';
     }
 
-    return { percent, text: `${percent}% (${Number(voltage).toFixed(2)}V)`, color, icon };
+    return { percent, text: `${percent}% (${voltage.toFixed(2)}V)`, color, icon };
   };
 
   useEffect(() => {
@@ -173,8 +175,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const targetTerminal = selectedDevice || devices[0]?.terminal_id;
 
+      // Filter and sort oldest to newest for chronological plotting
       const terminalLogs = devices
-        .filter((item: any) => item.terminal_id === targetTerminal)
+        .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
         .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
 
       if (terminalLogs.length === 0) return;
@@ -255,9 +258,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   }, [devices, selectedDevice, registeredDevices, isClient]);
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
-  const terminalLogs = devices.filter((item: any) => item.terminal_id === targetTerminal);
   
-  // FIX: Explicitly target the latest log (last item in sorted array) for summary info & address
+  const terminalLogs = devices
+    .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
+    .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
+  
+  // Latest log is strictly the last item in the chronological array
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
@@ -276,7 +282,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   return (
     <div className="space-y-4">
-      {/* Redesigned Flowchart Waypoint Template Bar: (1) ---- (2) ---- (3) */}
+      {/* Flowchart Waypoint Template Bar: (1) ---- (2) ---- (3) */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
           <span>Waypoint Flowchart Sequence (Click to Focus):</span>
@@ -341,7 +347,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <span className="text-[10px] text-muted-foreground">({latestLog.battery_voltage ? `${Number(latestLog.battery_voltage).toFixed(2)}V` : 'N/A'})</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2 pr-36">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2 pr-40">
             <div>
               Device Name: <span className="font-bold text-foreground">{activeDeviceName}</span>
             </div>
