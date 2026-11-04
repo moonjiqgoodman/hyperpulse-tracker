@@ -46,14 +46,12 @@ export default function DevicesPage() {
   const [telemetryLogs, setTelemetryLogs] = useState<TelemetryLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   
-  // Mapping of terminal_id to input text for unassigned devices
-  const [pairingNames, setPairingNames] = useState<Record<string, string>>({});
+  const [selectedTerminalId, setSelectedTerminalId] = useState('');
+  const [deviceName, setDeviceName] = useState('');
   
-  // Editing state for already paired devices (terminal_id -> new name)
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null);
   const [editedDeviceName, setEditedDeviceName] = useState<string>('');
 
-  // Feedback State
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -143,15 +141,17 @@ export default function DevicesPage() {
   const uniqueSeenTerminals = Array.from(new Set(telemetryLogs.map(l => String(l.terminal_id).trim())));
   const unpairedTerminals = uniqueSeenTerminals.filter(id => !registeredTerminalIds.has(id));
 
-  const handlePairDevice = async (terminalId: string) => {
-    const name = pairingNames[terminalId]?.trim();
-    if (!name) {
-      setMessage({ type: 'error', text: 'Please enter a device name before pairing.' });
+  const handleRegisterDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nameTrimmed = deviceName.trim();
+
+    if (!selectedTerminalId || !nameTrimmed) {
+      setMessage({ type: 'error', text: 'Please select a Terminal ID and enter a Device Name.' });
       return;
     }
 
-    if (existingNames.has(name.toLowerCase())) {
-      setMessage({ type: 'error', text: `Device name "${name}" is already taken. Names must be unique.` });
+    if (existingNames.has(nameTrimmed.toLowerCase())) {
+      setMessage({ type: 'error', text: `Device name "${nameTrimmed}" is already taken. Names must be unique.` });
       return;
     }
 
@@ -159,13 +159,14 @@ export default function DevicesPage() {
       const res = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ terminal_id: terminalId, device_name: name }),
+        body: JSON.stringify({ terminal_id: selectedTerminalId, device_name: nameTrimmed }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: 'success', text: `Device "${name}" paired successfully!` });
-        setPairingNames(prev => ({ ...prev, [terminalId]: '' }));
+        setMessage({ type: 'success', text: `Device "${nameTrimmed}" paired successfully!` });
+        setSelectedTerminalId('');
+        setDeviceName('');
         fetchData();
       } else {
         setMessage({ type: 'error', text: data.message || 'Failed to register device.' });
@@ -182,8 +183,6 @@ export default function DevicesPage() {
       return;
     }
 
-    // Check duplicate locally (excluding current device)
-    const currentDev = devices.find(d => d.terminal_id === terminalId);
     const otherNames = new Set(devices.filter(d => d.terminal_id !== terminalId).map(d => d.device_name.trim().toLowerCase()));
     if (otherNames.has(newName.toLowerCase())) {
       setMessage({ type: 'error', text: `Device name "${newName}" is already taken by another device.` });
@@ -262,7 +261,7 @@ export default function DevicesPage() {
 
             <div className="flex items-center gap-2 text-xs font-semibold">
               <FontAwesomeIcon icon={faMicrochip} className="text-primary" />
-              <span className="hidden sm:inline">Device Registry & Management</span>
+              <span className="hidden sm:inline">Device Registry & Pairing</span>
             </div>
           </div>
 
@@ -320,49 +319,66 @@ export default function DevicesPage() {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Detected Unassigned Devices ({unpairedTerminals.length})
+              Pair & Register Device
             </h2>
 
-            {unpairedTerminals.length === 0 ? (
-              <div className="border border-border rounded-xl bg-card p-6 text-center text-xs text-muted-foreground font-mono">
-                No new unassigned terminal IDs detected. All active devices are paired.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {unpairedTerminals.map((termId) => (
-                  <div key={termId} className="border border-border rounded-xl bg-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase font-mono text-muted-foreground tracking-wider">Terminal ID</div>
-                      <div className="font-mono text-xs font-bold text-foreground">{termId}</div>
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <input
-                        type="text"
-                        placeholder="Enter unique device name..."
-                        value={pairingNames[termId] || ''}
-                        onChange={(e) => setPairingNames({ ...pairingNames, [termId]: e.target.value })}
-                        className="flex-1 sm:w-60 bg-background text-xs text-foreground px-3 py-2 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-primary shadow-2xl"
-                      />
-                      <button
-                        onClick={() => handlePairDevice(termId)}
-                        className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-lg transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
-                      >
-                        <FontAwesomeIcon icon={faLink} className="h-3 w-3" />
-                        <span>Pair</span>
-                      </button>
+            <form onSubmit={handleRegisterDevice} className="border border-border rounded-xl bg-card p-5 space-y-4 shadow-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Select Available Terminal ID</label>
+                  <div className="relative">
+                    <select
+                      value={selectedTerminalId}
+                      onChange={(e) => setSelectedTerminalId(e.target.value)}
+                      className="w-full bg-background text-xs text-foreground px-3 py-2.5 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-primary font-mono cursor-pointer appearance-none shadow-2xs pr-8"
+                    >
+                      <option value="" className="bg-card text-muted-foreground">-- Choose an available terminal ID --</option>
+                      {unpairedTerminals.map((id) => (
+                        <option key={id} value={id} className="bg-card text-foreground py-1">
+                          {id}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-[10px]">
+                      ▼
                     </div>
                   </div>
-                ))}
+                  {unpairedTerminals.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1.5 font-mono">No new unassigned terminal IDs detected yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-muted-foreground mb-1.5">Device Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Tracker ##"
+                    value={deviceName}
+                    onChange={(e) => setDeviceName(e.target.value)}
+                    className="w-full bg-background text-xs text-foreground px-3 py-2.5 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs"
+                  />
+                </div>
               </div>
-            )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={unpairedTerminals.length === 0}
+                  className="px-5 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold rounded-lg transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FontAwesomeIcon icon={faLink} className="h-3 w-3" />
+                  <span>Pair</span>
+                </button>
+              </div>
+            </form>
           </div>
 
-          {/* Paired Devices List with Inline Rename & Unpair */}
-          <div className="space-y-3 pt-2">
+          {/* Paired Devices List with Inline Table Renaming */}
+          <div className="space-y-2 pt-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Paired Devices ({devices.length})
