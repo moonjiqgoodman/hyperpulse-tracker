@@ -111,3 +111,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const terminalId = searchParams.get('terminal_id');
+
+    if (!terminalId) {
+      return NextResponse.json({ error: 'Missing terminal_id' }, { status: 400 });
+    }
+
+    await pool.execute('DELETE FROM telemetry_logs WHERE terminal_id = ?', [terminalId]);
+    return NextResponse.json({ status: 'success', message: `Deleted logs for ${terminalId}` }, { status: 200 });
+  } catch (error) {
+    console.error('Database delete error:', error);
+    return NextResponse.json({ error: 'Failed to delete telemetry logs' }, { status: 500 });
+  }
+}
