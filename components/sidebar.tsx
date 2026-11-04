@@ -72,6 +72,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
+  // Consider online if last update was within 24 hours (86400000 ms), otherwise offline
   const isOnline = (recordedAt: string) => {
     const lastSeen = getNormalizedDate(recordedAt).getTime();
     const now = new Date().getTime();
@@ -100,7 +101,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
 
   // Helper to format Malaysia time correctly utilizing timestamp_my or fallback parsing
   const formatToMalaysiaTime = (device: any) => {
-    // If backend provided timestamp_my string (e.g. "2026-11-04 11:10:53")
     if (device.timestamp_my) {
       try {
         const parts = device.timestamp_my.split(/[- :]/);
@@ -147,7 +147,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const deviceList = Array.from(uniqueDevicesMap.values());
 
   const filteredDevices = deviceList.filter((device) => {
-    const online = isOnline(device.recorded_at);
+    const online = isOnline(device.recorded_at || device.timestamp_my);
     if (filter === 'ONLINE') return online;
     if (filter === 'OFFLINE') return !online;
     return true;
@@ -212,7 +212,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </div>
           ) : (
             filteredDevices.map((device) => {
-              const online = isOnline(device.recorded_at);
+              const online = isOnline(device.recorded_at || device.timestamp_my);
               const isSelected = selectedDevice === device.terminal_id;
               const timeAgoText = getTimeAgo(device.recorded_at || device.timestamp_my);
               const malaysiaTimeText = formatToMalaysiaTime(device);

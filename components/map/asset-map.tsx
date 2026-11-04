@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -26,7 +26,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
   const markersRef = useRef<{ [key: number]: any }>({});
-  const hasFittedBoundsRef = useRef(false); // Prevents map from resetting zoom on periodic data updates
+  const polylineRef = useRef<any | null>(null); // Reference to polyline to easily re-fit bounds on demand
+  const hasFittedBoundsRef = useRef(false);
   const prevSelectedDeviceRef = useRef(selectedDevice);
 
   const [, setTick] = useState(0);
@@ -46,7 +47,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return () => clearInterval(timer);
   }, []);
 
-  // If selected device changes, allow fitBounds to run once for the new device
   if (prevSelectedDeviceRef.current !== selectedDevice) {
     prevSelectedDeviceRef.current = selectedDevice;
     hasFittedBoundsRef.current = false;
@@ -208,6 +208,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         lineCap: 'round',
       });
       layerGroup.addLayer(dashedPolyline);
+      polylineRef.current = dashedPolyline; // Save ref for reset view button
 
       terminalLogs.forEach((log: any, index: number) => {
         const lat = parseFloat(log.latitude);
@@ -260,7 +261,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         markersRef.current[waypointNumber] = marker;
       });
 
-      // Only fit bounds on initial load/device switch so manual user panning/zooming is preserved
       if (latLngs.length > 0 && !hasFittedBoundsRef.current) {
         map.fitBounds(dashedPolyline.getBounds(), { padding: [50, 50] });
         hasFittedBoundsRef.current = true;
@@ -288,6 +288,15 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const marker = markersRef.current[waypointNum];
     if (marker) {
       marker.openPopup();
+    }
+  };
+
+  // Reset Map View to fit all current waypoints perfectly
+  const handleResetMapView = () => {
+    const map = mapRef.current;
+    const polyline = polylineRef.current;
+    if (map && polyline) {
+      map.fitBounds(polyline.getBounds(), { padding: [50, 50], animate: true });
     }
   };
 
@@ -349,7 +358,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       {/* Scrollable Flowchart Sequence Bar & Action Buttons */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
-          <span>Waypoint:</span>
+          <span>Waypoint Flowchart Sequence (Click to Focus):</span>
           <div className="flex items-center gap-2.5">
             <span className="font-mono">{terminalLogs.length} Waypoints</span>
             {terminalLogs.length > 0 && (
@@ -368,7 +377,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                   title="Reset / Delete all telemetry data"
                 >
                   <FontAwesomeIcon icon={faTrashCan} className="h-3.5 w-3.5" />
-                  <span style={{ color: 'white' }}>Reset Data</span>
+                  <span>Reset Data</span>
                 </button>
               </>
             )}
@@ -414,11 +423,24 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       </div>
 
-      <div 
-        ref={mapContainerRef} 
-        className="w-full rounded-xl overflow-hidden shadow-sm border border-border z-0" 
-        style={{ height: '450px', minHeight: '400px' }} 
-      />
+      {/* Map Container with Reset View Button Positioned at Bottom Right Above Map */}
+      <div className="relative w-full rounded-xl overflow-hidden shadow-sm border border-border">
+        <div 
+          ref={mapContainerRef} 
+          className="w-full z-0" 
+          style={{ height: '450px', minHeight: '400px' }} 
+        />
+        
+        {/* Reset Map View Button (Bottom Right Above Map with White Text) */}
+        <button
+          onClick={handleResetMapView}
+          className="absolute bottom-4 right-4 z-[400] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
+          title="Reset map view to fit all waypoints"
+        >
+          <FontAwesomeIcon icon={faCrosshairs} className="h-3.5 w-3.5 text-blue-400" />
+          <span>Reset View</span>
+        </button>
+      </div>
 
       {!latestLog ? (
         <div className="text-xs bg-destructive/10 text-destructive p-3 rounded-lg border border-destructive/20">
