@@ -357,7 +357,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       {/* Scrollable Flowchart Sequence Bar & Action Buttons */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
-          <span>Waypoint Flowchart Sequence (Click to Focus):</span>
+          <span>Waypoint:</span>
           <div className="flex items-center gap-2.5">
             <span className="font-mono">{terminalLogs.length} Waypoints</span>
             {terminalLogs.length > 0 && (
