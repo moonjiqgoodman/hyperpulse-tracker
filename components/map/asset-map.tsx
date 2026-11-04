@@ -175,7 +175,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const targetTerminal = selectedDevice || devices[0]?.terminal_id;
 
-      // Filter and sort oldest to newest for chronological plotting
       const terminalLogs = devices
         .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
         .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
@@ -263,7 +262,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
     .sort((a: any, b: any) => getNormalizedDate(a.recorded_at || a.timestamp_my).getTime() - getNormalizedDate(b.recorded_at || b.timestamp_my).getTime());
   
-  // Latest log is strictly the last item in the chronological array
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
@@ -282,14 +280,15 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   return (
     <div className="space-y-4">
-      {/* Flowchart Waypoint Template Bar: (1) ---- (2) ---- (3) */}
+      {/* Scrollable Flowchart Sequence Bar: (1) ---- (2) ---- (3) */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
-          <span>Waypoint Flowchart Sequence (Click to Focus):</span>
+          <span>Waypoint::</span>
           <span className="font-mono">{terminalLogs.length} Waypoints</span>
         </div>
         
-        <div className="flex items-center overflow-x-auto py-2 px-1 gap-1 no-scrollbar">
+        {/* Enforced horizontal scrolling container */}
+        <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
             const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
@@ -298,26 +297,26 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             return (
               <React.Fragment key={idx}>
                 {idx > 0 && (
-                  <div className="flex items-center text-muted-foreground/40 font-mono px-1 select-none">
+                  <div className="text-muted-foreground/40 font-mono select-none shrink-0">
                     ----
                   </div>
                 )}
                 <button
                   onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
-                  className="group flex items-center gap-2 bg-background hover:bg-muted/80 border border-border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0"
+                  className="group flex items-center gap-2.5 bg-background hover:bg-muted/80 border border-border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0"
                   title={`Focus on Waypoint #${waypointNum}`}
                 >
                   <span 
-                    className="h-5 w-5 rounded-full text-white flex items-center justify-center font-bold text-[10px] shadow-xs"
+                    className="h-6 w-6 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
                     style={{ backgroundColor: color }}
                   >
                     {waypointNum}
                   </span>
                   <div className="text-left font-mono">
-                    <div className="text-[11px] font-bold text-foreground group-hover:text-primary transition-colors">
-                      ({waypointNum}) {isLast ? 'Latest' : `Step ${waypointNum}`}
+                    <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                      {isLast ? 'Latest' : `Waypoint ${waypointNum}`}
                     </div>
-                    <div className="text-[9px] text-muted-foreground">
+                    <div className="text-[10px] text-muted-foreground">
                       {getTimeAgo(log.recorded_at || log.timestamp_my)}
                     </div>
                   </div>
@@ -339,17 +338,17 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           No waypoints found. Select a device from the sidebar or wait for incoming packets.
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground bg-muted p-3.5 rounded-lg space-y-2 border border-border relative">
-          {/* iPhone-style Battery Indicator at Top Right Corner */}
-          <div className="absolute top-3.5 right-4 flex items-center gap-1.5 bg-background/80 backdrop-blur px-2.5 py-1 rounded-full border border-border shadow-xs font-mono">
-            <FontAwesomeIcon icon={latestBattery.icon} className={`h-3.5 w-3.5 ${latestBattery.color}`} />
-            <span className="font-bold text-foreground">{latestBattery.percent}%</span>
-            <span className="text-[10px] text-muted-foreground">({latestLog.battery_voltage ? `${Number(latestLog.battery_voltage).toFixed(2)}V` : 'N/A'})</span>
+        <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
+          {/* Bigger, Cleanly Aligned iPhone-style Battery Indicator at Top Right Corner */}
+          <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
+            <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
+            <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
+            <span className="text-xs text-muted-foreground">({latestLog.battery_voltage ? `${Number(latestLog.battery_voltage).toFixed(2)}V` : 'N/A'})</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2 pr-40">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-44">
             <div>
-              Device Name: <span className="font-bold text-foreground">{activeDeviceName}</span>
+              Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
             <div>
               Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
@@ -367,7 +366,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               </span>
             </div>
           </div>
-          <div className="truncate pt-1 border-t border-border/60">
+          <div className="truncate pt-1.5 border-t border-border/60">
             <span className="text-muted-foreground/80">Last Address:</span>{' '}
             <span className="font-bold text-foreground">{latestLog.address || 'N/A'}</span>
           </div>
