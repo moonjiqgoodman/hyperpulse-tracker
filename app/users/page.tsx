@@ -443,7 +443,6 @@ export default function UserManagementPage() {
                                 title="Senior Administrator (Protected)"
                               >
                                 <FontAwesomeIcon icon={faShieldHalved} className="h-3 w-3 text-amber-500" />
-                                <span>Protected</span>
                               </span>
                             )}
                           </div>
