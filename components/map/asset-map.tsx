@@ -224,6 +224,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const convertedTime = formatToMalaysiaTime(log);
         const timeAgo = getTimeAgo(log.timestamp_my || log.recorded_at);
         const batteryInfo = getBatteryStats(log.battery_voltage);
+        const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
+        const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
 
         const customIcon = L.divIcon({
           className: 'custom-waypoint-badge',
@@ -254,6 +256,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
              <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
              Device Name: <b>${deviceName}</b><br />
              Battery: <b>${batteryInfo.text}</b><br />
+             Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
              Address: ${log.address || 'N/A'}<br />
              Time: ${convertedTime} (${timeAgo})
            </div>`
@@ -304,18 +307,20 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const handleExportExcel = () => {
     if (!terminalLogs || terminalLogs.length === 0) return;
 
-    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Battery Voltage (V)', 'Malaysia Time (MYT)', 'UTC Time', 'Address'];
+    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery Voltage (V)', 'Malaysia Time (MYT)', 'UTC Time', 'Address'];
     
     const rows = terminalLogs.map((log: any, idx: number) => {
       const devName = getDeviceName(log.terminal_id);
       const lat = log.latitude;
       const lng = log.longitude;
+      const elevation = log.elevation !== null && log.elevation !== undefined ? log.elevation : 'N/A';
+      const temperature = log.temperature !== null && log.temperature !== undefined ? log.temperature : 'N/A';
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? log.battery_voltage : 'N/A';
       const myt = log.timestamp_my || 'N/A';
       const utc = log.recorded_at || 'N/A';
       const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
 
-      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, batt, `"${myt}"`, `"${utc}"`, addr].join(',');
+      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, elevation, temperature, batt, `"${myt}"`, `"${utc}"`, addr].join(',');
     });
 
     const csvContent = [headers.join(','), ...rows].join('\n');
@@ -466,15 +471,23 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
             </div>
             <div>
+              <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
+              <span className="font-bold text-foreground">
+                {latestLog.elevation !== null && latestLog.elevation !== undefined ? `${latestLog.elevation}m` : 'N/A'} / {latestLog.temperature !== null && latestLog.temperature !== undefined ? `${latestLog.temperature}°C` : 'N/A'}
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2">
+            <div>
               <span className="text-muted-foreground/80">Last Updated (MYT):</span>{' '}
               <span className="font-bold text-foreground">
                 {formatToMalaysiaTime(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.timestamp_my || latestLog.recorded_at)})</span>
               </span>
             </div>
-          </div>
-          <div className="truncate pt-1.5 border-t border-border/60">
-            <span className="text-muted-foreground/80">Last Address:</span>{' '}
-            <span className="font-bold text-foreground">{latestLog.address || 'N/A'}</span>
+            <div className="truncate">
+              <span className="text-muted-foreground/80">Last Address:</span>{' '}
+              <span className="font-bold text-foreground">{latestLog.address || 'N/A'}</span>
+            </div>
           </div>
         </div>
       )}

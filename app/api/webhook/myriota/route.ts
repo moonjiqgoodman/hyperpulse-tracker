@@ -11,7 +11,7 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-const VALID_CERT_URL = "https://security.myriota.com/data-13f7751f3c5df569a6c9c42a9ce73a8a.crt";
+const VALID_CERT_URL = process.env.MYRIOTA_CERT_URL || "https://security.myriota.com/data-13f7751f3c5df569a6c9c42a9ce73a8a.crt";
 
 async function getAddressFromCoords(lat: number, lng: number) {
   if (lat === 0 && lng === 0) return "Unknown Location";
@@ -71,6 +71,8 @@ export async function POST(request: Request) {
 
     const lat = parseFloat(dataObj?.latitude || dataObj?.lat || 0);
     const lng = parseFloat(dataObj?.longitude || dataObj?.lng || dataObj?.lon || 0);
+    const elevation = dataObj?.elevation !== undefined ? parseFloat(dataObj.elevation) : null;
+    const temperature = dataObj?.temperature !== undefined ? parseFloat(dataObj.temperature) : null;
     const batteryVoltage = dataObj?.battery_voltage !== undefined ? parseFloat(dataObj.battery_voltage) : null;
 
     const currentAddress = await getAddressFromCoords(lat, lng);
@@ -86,13 +88,13 @@ export async function POST(request: Request) {
     const timestampMy = mytDate.toISOString().slice(0, 19).replace('T', ' ');
 
     const query = `
-      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, address, battery_voltage, recorded_at, timestamp_my) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, elevation, temperature, address, battery_voltage, recorded_at, timestamp_my) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    await pool.execute(query, [terminalId, lat, lng, currentAddress, batteryVoltage, timestampUtc, timestampMy]);
+    await pool.execute(query, [terminalId, lat, lng, elevation, temperature, currentAddress, batteryVoltage, timestampUtc, timestampMy]);
 
-    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}, Battery: ${batteryVoltage}V, MYT: ${timestampMy}`);
-    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, batteryVoltage, timestampMy }, { status: 200 });
+    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}, Elev: ${elevation}m, Temp: ${temperature}°C, Battery: ${batteryVoltage}V, MYT: ${timestampMy}`);
+    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, elevation, temperature, batteryVoltage, timestampMy }, { status: 200 });
 
   } catch (error) {
     console.error('Database save error:', error);
