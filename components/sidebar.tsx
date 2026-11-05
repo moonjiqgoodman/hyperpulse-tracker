@@ -6,13 +6,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicrochip, faUsers, faLink, faClock, faSignal } from '@fortawesome/free-solid-svg-icons';
+import { faMicrochip, faUsers, faLink, faClock, faMountain, faTemperatureHigh, faTemperatureLow } from '@fortawesome/free-solid-svg-icons';
 
 interface DeviceLog {
   terminal_id: string;
   device_name?: string;
   latitude: number;
   longitude: number;
+  elevation?: number;
+  temperature?: number;
   address: string;
   recorded_at: string;
   timestamp_my?: string;
@@ -142,16 +144,15 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   // Helper to compute average message interval/frequency for a specific terminal ID
   const getDeviceFrequencyInfo = (terminalId: string) => {
     const deviceLogs = devices.filter(d => String(d.terminal_id).trim() === String(terminalId).trim());
-    if (deviceLogs.length <= 1) return 'First message';
+    if (deviceLogs.length <= 1) return 'First msg';
 
     const timestamps = deviceLogs
       .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
       .filter(t => !isNaN(t) && t > 0)
-      .sort((a, b) => a - b); // chronological
+      .sort((a, b) => a - b);
 
-    if (timestamps.length < 2) return '1 msg recorded';
+    if (timestamps.length < 2) return '1 msg';
 
-    // Calculate average time difference between consecutive coordinate messages
     let totalDiffMs = 0;
     for (let i = 1; i < timestamps.length; i++) {
       totalDiffMs += (timestamps[i] - timestamps[i - 1]);
@@ -161,11 +162,11 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     const avgDiffHours = avgDiffMs / (1000 * 60 * 60);
 
     if (avgDiffMins < 60) {
-      return `~${avgDiffMins}m / msg`;
+      return `~${avgDiffMins}m/msg`;
     } else if (avgDiffHours < 24) {
-      return `~${avgDiffHours.toFixed(1)}h / msg`;
+      return `~${avgDiffHours.toFixed(1)}h/msg`;
     } else {
-      return `~${(avgDiffHours / 24).toFixed(1)}d / msg`;
+      return `~${(avgDiffHours / 24).toFixed(1)}d/msg`;
     }
   };
 
@@ -235,7 +236,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           </div>
         </div>
 
-        {/* Device List Section with Frequency Analysis at the Bottom of Each Tab */}
+        {/* Device List Section with Frequency, Elevation, and Temperature */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
           {filteredDevices.length === 0 ? (
             <div className="text-center text-muted-foreground text-xs py-10">
@@ -249,6 +250,11 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
               const malaysiaTimeText = formatToMalaysiaTime(device);
               const friendlyName = deviceNames[device.terminal_id];
               const frequencyText = getDeviceFrequencyInfo(device.terminal_id);
+
+              const elevationVal = device.elevation !== null && device.elevation !== undefined ? `${device.elevation}m` : 'N/A';
+              const tempVal = device.temperature !== null && device.temperature !== undefined ? `${device.temperature}°C` : 'N/A';
+              const tempNum = device.temperature !== undefined ? Number(device.temperature) : 0;
+              const tempColorClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500' : 'text-blue-400';
 
               return (
                 <div
@@ -292,13 +298,25 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                     {device.address || 'Unknown location'}
                   </p>
 
-                  {/* Transmission frequency indicator at the bottom of each device card */}
-                  <div className="text-[9px] font-mono opacity-60 flex items-center justify-between pt-1 border-t border-border/40">
-                    <span>{malaysiaTimeText}</span>
-                    <span className="flex items-center gap-1 text-primary font-medium">
+                  {/* Telemetry Stats: Elevation, Temperature, and Message Rate */}
+                  <div className="grid grid-cols-3 gap-1 py-1 px-1.5 bg-background/60 rounded border border-border/40 text-[9px] font-mono mb-1.5">
+                    <div className="flex items-center gap-1 text-foreground" title="Elevation">
+                      <FontAwesomeIcon icon={faMountain} className="text-amber-600 h-2.5 w-2.5" />
+                      <span>{elevationVal}</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${tempColorClass}`} title="Temperature">
+                      <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-2.5 w-2.5" />
+                      <span>{tempVal}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-primary justify-end font-medium" title="Message Interval">
                       <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
-                      {frequencyText}
-                    </span>
+                      <span>{frequencyText}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-[9px] font-mono opacity-50 flex items-center justify-between pt-0.5 border-t border-border/40">
+                    <span>{malaysiaTimeText}</span>
+                    <span className="uppercase tracking-wider opacity-75">GMT+8</span>
                   </div>
                 </div>
               );
