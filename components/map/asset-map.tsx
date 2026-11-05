@@ -1,9 +1,10 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -118,7 +119,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const getBatteryStats = (voltageVal: any) => {
     const voltage = voltageVal !== null && voltageVal !== undefined ? parseFloat(voltageVal) : NaN;
     if (isNaN(voltage) || voltage <= 0) {
-      return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
+      return { percent: 0, color: 'text-muted-foreground', icon: faBatteryEmpty };
     }
 
     const minV = 2.0; 
@@ -140,7 +141,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       color = 'text-emerald-500';
     }
 
-    return { percent, text: `${percent}% (${voltage.toFixed(2)}V)`, color, icon };
+    return { percent, color, icon };
   };
 
   useEffect(() => {
@@ -255,7 +256,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           `<div style="font-size: 12px; line-height: 1.4;">
              <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
              Device Name: <b>${deviceName}</b><br />
-             Battery: <b>${batteryInfo.text}</b><br />
+             Battery: <b>${batteryInfo.percent}%</b><br />
              Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
              Address: ${log.address || 'N/A'}<br />
              Time: ${convertedTime} (${timeAgo})
@@ -284,6 +285,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
   const expectedDeletePhrase = `DELETE DEVICE ${activeDeviceName}`;
 
+  const latestElevation = latestLog?.elevation !== null && latestLog?.elevation !== undefined ? `${latestLog.elevation}m` : 'N/A';
+  const latestTemp = latestLog?.temperature !== null && latestLog?.temperature !== undefined ? `${latestLog.temperature}°C` : 'N/A';
+  const tempNum = latestLog?.temperature !== undefined ? Number(latestLog.temperature) : 0;
+  const tempAnimClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500 font-semibold' : 'text-blue-400';
+
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
     const map = mapRef.current;
     if (!map) return;
@@ -307,7 +313,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const handleExportExcel = () => {
     if (!terminalLogs || terminalLogs.length === 0) return;
 
-    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery Voltage (V)', 'Malaysia Time (MYT)', 'UTC Time', 'Address'];
+    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery (%)', 'Malaysia Time (MYT)', 'UTC Time', 'Address'];
     
     const rows = terminalLogs.map((log: any, idx: number) => {
       const devName = getDeviceName(log.terminal_id);
@@ -315,7 +321,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const lng = log.longitude;
       const elevation = log.elevation !== null && log.elevation !== undefined ? log.elevation : 'N/A';
       const temperature = log.temperature !== null && log.temperature !== undefined ? log.temperature : 'N/A';
-      const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? log.battery_voltage : 'N/A';
+      const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? `${getBatteryStats(log.battery_voltage).percent}%` : 'N/A';
       const myt = log.timestamp_my || 'N/A';
       const utc = log.recorded_at || 'N/A';
       const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
@@ -454,10 +460,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
-            <span className="text-xs text-muted-foreground">({latestLog.battery_voltage ? `${Number(latestLog.battery_voltage).toFixed(2)}V` : 'N/A'})</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-44">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-32">
             <div>
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
@@ -470,11 +475,19 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <span className="text-muted-foreground/80">Latest Coordinates:</span>{' '}
               <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
             </div>
-            <div>
+            <div className="flex items-center gap-3">
               <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
-              <span className="font-bold text-foreground">
-                {latestLog.elevation !== null && latestLog.elevation !== undefined ? `${latestLog.elevation}m` : 'N/A'} / {latestLog.temperature !== null && latestLog.temperature !== undefined ? `${latestLog.temperature}°C` : 'N/A'}
-              </span>
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 font-bold text-amber-600 animate-bounce">
+                  <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
+                  {latestElevation}
+                </span>
+                <span className="text-muted-foreground">/</span>
+                <span className={`inline-flex items-center gap-1 font-bold ${tempAnimClass}`}>
+                  <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-3 w-3" />
+                  {latestTemp}
+                </span>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2">
