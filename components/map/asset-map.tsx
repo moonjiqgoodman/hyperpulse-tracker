@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -119,7 +118,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const getBatteryStats = (voltageVal: any) => {
     const voltage = voltageVal !== null && voltageVal !== undefined ? parseFloat(voltageVal) : NaN;
     if (isNaN(voltage) || voltage <= 0) {
-      return { percent: 0, color: 'text-muted-foreground', icon: faBatteryEmpty };
+      return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
     }
 
     const minV = 2.0; 
@@ -141,7 +140,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       color = 'text-emerald-500';
     }
 
-    return { percent, color, icon };
+    return { percent, text: `${percent}% (${voltage.toFixed(2)}V)`, color, icon };
   };
 
   useEffect(() => {
@@ -256,7 +255,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           `<div style="font-size: 12px; line-height: 1.4;">
              <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
              Device Name: <b>${deviceName}</b><br />
-             Battery: <b>${batteryInfo.percent}%</b><br />
+             Battery: <b>${batteryInfo.text}</b><br />
              Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
              Address: ${log.address || 'N/A'}<br />
              Time: ${convertedTime} (${timeAgo})
@@ -457,12 +456,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       ) : (
         <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
-          <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
+          <div className="absolute top-3 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20 -mt-1">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-32">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-28">
             <div>
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
@@ -478,7 +477,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <div className="flex items-center gap-3">
               <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
               <div className="inline-flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 font-bold text-amber-600 animate-bounce">
+                <span className="inline-flex items-center gap-1 font-bold text-amber-600">
                   <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
                   {latestElevation}
                 </span>
@@ -490,16 +489,16 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2 items-start">
             <div>
               <span className="text-muted-foreground/80">Last Updated (MYT):</span>{' '}
               <span className="font-bold text-foreground">
                 {formatToMalaysiaTime(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.timestamp_my || latestLog.recorded_at)})</span>
               </span>
             </div>
-            <div className="truncate">
+            <div>
               <span className="text-muted-foreground/80">Last Address:</span>{' '}
-              <span className="font-bold text-foreground">{latestLog.address || 'N/A'}</span>
+              <span className="font-bold text-foreground leading-relaxed block sm:inline">{latestLog.address || 'N/A'}</span>
             </div>
           </div>
         </div>
