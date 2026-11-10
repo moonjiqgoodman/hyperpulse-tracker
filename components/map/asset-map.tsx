@@ -55,10 +55,16 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  const getNormalizedDate = (dateString: string) => {
-    if (!dateString) return new Date(0);
+  const getNormalizedDate = (dateInput: any) => {
+    if (!dateInput) return new Date(0);
     try {
-      const dateStr = String(dateString);
+      if (!isNaN(dateInput) && Number(dateInput) > 0) {
+        const num = Number(dateInput);
+        const ms = String(num).length === 10 ? num * 1000 : num;
+        return new Date(ms);
+      }
+
+      const dateStr = String(dateInput);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -252,31 +258,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
 
-        const customIcon = L.divIcon({
-          className: 'custom-waypoint-badge',
-          html: `
-            <div style="
-              background-color: ${markerColor};
-              color: white;
-              width: 28px;
-              height: 28px;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: bold;
-              font-size: 12px;
-              box-shadow: 0 3px 6px rgba(0,0,0,0.3);
-              border: 2px solid white;
-            ">
-              ${waypointNumber}
-            </div>
-          `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        });
-
-        // Structured table layout inside the Leaflet Popup
+        // Structured table layout with bold Address
         const popupContent = `
           <div style="font-size: 12px; font-family: inherit; min-width: 240px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -301,8 +283,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                   <td style="padding: 2px 0; font-weight: 600;">${tempStr}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 2px 0; color: #6b7280; vertical-align: top;">Address:</td>
-                  <td style="padding: 2px 0; line-height: 1.3;">${log.address || 'N/A'}</td>
+                  <td style="padding: 2px 0; color: #6b7280; vertical-align: top; font-weight: bold;">Address:</td>
+                  <td style="padding: 2px 0; font-weight: bold; line-height: 1.3;">${log.address || 'N/A'}</td>
                 </tr>
                 <tr>
                   <td style="padding: 4px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold;">GPS Time:</td>
@@ -365,7 +347,20 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const handleExportExcel = () => {
     if (!terminalLogs || terminalLogs.length === 0) return;
 
-    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery (%)', 'GPS Time (MYT)', 'Received Time (MYT)', 'Address'];
+    const headers = [
+      'Waypoint #', 
+      'Device Name', 
+      'Terminal ID', 
+      'Latitude', 
+      'Longitude', 
+      'Elevation (m)', 
+      'Temperature (°C)', 
+      'Battery (%)', 
+      'GPS Time (Transmit)', 
+      'Received Time (Server)', 
+      'Gap (Hours)', 
+      'Address'
+    ];
     
     const rows = terminalLogs.map((log: any, idx: number) => {
       const devName = getDeviceName(log.terminal_id);
@@ -376,9 +371,42 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? `${getBatteryStats(log.battery_voltage).percent}%` : 'N/A';
       const gpsTime = formatGpsTimeToMalaysia(log);
       const receivedTime = formatServerTimeToMalaysia(log);
+
+      // Calculate gap in hours between transmit (recorded_at / GPS time) and receive (timestamp_my)
+      let gapHours = 'N/A';
+      try {
+        const rawTransmit = log.recorded_at;
+        const rawReceive = log.timestamp_my;
+        if (rawTransmit && rawReceive) {
+          const num = Number(rawTransmit);
+          const transmitMs = !isNaN(num) && num > 0 ? (String(num).length === 10 ? num * 1000 : num) : getNormalizedDate(rawTransmit).getTime();
+          const receiveMs = getNormalizedDate(rawReceive).getTime();
+
+          if (!isNaN(transmitMs) && !isNaN(receiveMs) && transmitMs > 0 && receiveMs > 0) {
+            const diffMs = receiveMs - transmitMs;
+            gapHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+          }
+        }
+      } catch (e) {
+        gapHours = 'N/A';
+      }
+
       const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
 
-      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, elevation, temperature, batt, `"${gpsTime}"`, `"${receivedTime}"`, addr].join(',');
+      return [
+        idx + 1, 
+        `"${devName}"`, 
+        `"${log.terminal_id}"`, 
+        lat, 
+        lng, 
+        elevation, 
+        temperature, 
+        batt, 
+        `"${gpsTime}"`, 
+        `"${receivedTime}"`, 
+        gapHours, 
+        addr
+      ].join(',');
     });
 
     const csvContent = [headers.join(','), ...rows].join('\n');
