@@ -60,16 +60,10 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(timer);
   }, []);
 
-  const getNormalizedDate = (dateInput: any) => {
-    if (!dateInput) return new Date(0);
+  const getNormalizedDate = (dateString: string) => {
+    if (!dateString) return new Date(0);
     try {
-      if (!isNaN(dateInput) && Number(dateInput) > 0) {
-        const num = Number(dateInput);
-        const ms = String(num).length === 10 ? num * 1000 : num;
-        return new Date(ms);
-      }
-
-      const dateStr = String(dateInput);
+      const dateStr = String(dateString);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -83,16 +77,16 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  const isOnline = (recordedAt: any) => {
-    const lastSeen = getNormalizedDate(recordedAt).getTime();
+  const isOnline = (timestampMy: string) => {
+    const lastSeen = getNormalizedDate(timestampMy).getTime();
     const now = new Date().getTime();
     return (now - lastSeen) <= 24 * 60 * 60 * 1000;
   };
 
-  const getTimeAgo = (recordedAt: any) => {
-    if (!recordedAt) return 'Unknown';
+  const getTimeAgo = (timestampMy: string) => {
+    if (!timestampMy) return 'Unknown';
     try {
-      const past = getNormalizedDate(recordedAt).getTime();
+      const past = getNormalizedDate(timestampMy).getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
       
@@ -109,17 +103,12 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  const formatToMalaysiaTime = (device: any) => {
-    const rawTime = device.recorded_at;
-    if (!rawTime) return device.timestamp_my || 'N/A';
+  const formatServerTimeToMalaysia = (device: any) => {
+    const targetTimeVal = device.timestamp_my || device.recorded_at;
+    if (!targetTimeVal) return 'N/A';
     try {
-      const num = Number(rawTime);
-      const ms = !isNaN(num) && num > 0 
-        ? (String(num).length === 10 ? num * 1000 : num) 
-        : getNormalizedDate(rawTime).getTime();
-
-      if (isNaN(ms) || ms === 0) return String(rawTime);
-      const date = new Date(ms);
+      const date = getNormalizedDate(targetTimeVal);
+      if (isNaN(date.getTime())) return String(targetTimeVal);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -131,7 +120,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         hour12: false,
       }).format(date);
     } catch (e) {
-      return String(rawTime);
+      return String(targetTimeVal);
     }
   };
 
@@ -140,7 +129,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     if (deviceLogs.length <= 1) return 'First msg';
 
     const timestamps = deviceLogs
-      .map(d => getNormalizedDate(d.recorded_at).getTime())
+      .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
       .filter(t => !isNaN(t) && t > 0)
       .sort((a, b) => a - b);
 
@@ -172,7 +161,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const deviceList = Array.from(uniqueDevicesMap.values());
 
   const filteredDevices = deviceList.filter((device) => {
-    const online = isOnline(device.recorded_at);
+    const online = isOnline(device.timestamp_my || device.recorded_at);
     if (filter === 'ONLINE') return online;
     if (filter === 'OFFLINE') return !online;
     return true;
@@ -235,10 +224,10 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </div>
           ) : (
             filteredDevices.map((device) => {
-              const online = isOnline(device.recorded_at);
+              const online = isOnline(device.timestamp_my || device.recorded_at);
               const isSelected = selectedDevice === device.terminal_id;
-              const timeAgoText = getTimeAgo(device.recorded_at);
-              const malaysiaTimeText = formatToMalaysiaTime(device);
+              const timeAgoText = getTimeAgo(device.timestamp_my || device.recorded_at);
+              const malaysiaTimeText = formatServerTimeToMalaysia(device);
               const friendlyName = deviceNames[device.terminal_id];
               const frequencyText = getDeviceFrequencyInfo(device.terminal_id);
 

@@ -56,16 +56,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  const getNormalizedDate = (dateInput: any) => {
-    if (!dateInput) return new Date(0);
+  const getNormalizedDate = (dateString: string) => {
+    if (!dateString) return new Date(0);
     try {
-      if (!isNaN(dateInput) && Number(dateInput) > 0) {
-        const num = Number(dateInput);
-        const ms = String(num).length === 10 ? num * 1000 : num;
-        return new Date(ms);
-      }
-
-      const dateStr = String(dateInput);
+      const dateStr = String(dateString);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -79,10 +73,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const getTimeAgo = (dateInput: any) => {
-    if (!dateInput) return 'Unknown';
+  const getTimeAgo = (timestampMy: string) => {
+    if (!timestampMy) return 'Unknown';
     try {
-      const past = getNormalizedDate(dateInput).getTime();
+      const past = getNormalizedDate(timestampMy).getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
       
@@ -99,17 +93,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const formatGpsTimeToMalaysia = (log: any) => {
-    const rawTime = log.recorded_at;
-    if (!rawTime) return log.timestamp_my || 'N/A';
+  const formatServerTimeToMalaysia = (log: any) => {
+    const targetTime = log.timestamp_my || log.recorded_at;
+    if (!targetTime) return 'N/A';
     try {
-      const num = Number(rawTime);
-      const ms = !isNaN(num) && num > 0 
-        ? (String(num).length === 10 ? num * 1000 : num) 
-        : getNormalizedDate(rawTime).getTime();
-
-      if (isNaN(ms) || ms === 0) return String(rawTime);
-      const date = new Date(ms);
+      const date = getNormalizedDate(targetTime);
+      if (isNaN(date.getTime())) return targetTime;
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -122,7 +111,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hour12: false,
       }).format(date) + ' (GMT+8)';
     } catch (e) {
-      return rawTime;
+      return targetTime;
     }
   };
 
@@ -204,7 +193,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const terminalLogs = devices
         .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-        .sort((a: any, b: any) => getNormalizedDate(a.recorded_at).getTime() - getNormalizedDate(b.recorded_at).getTime());
+        .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
 
       if (terminalLogs.length === 0) return;
 
@@ -232,8 +221,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const markerColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[index % WAYPOINT_COLORS.length];
         const deviceName = getDeviceName(log.terminal_id);
 
-        const convertedTime = formatGpsTimeToMalaysia(log);
-        const timeAgo = getTimeAgo(log.recorded_at);
+        const convertedTime = formatServerTimeToMalaysia(log);
+        const timeAgo = getTimeAgo(log.timestamp_my || log.recorded_at);
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
@@ -269,7 +258,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
              Battery: <b>${batteryInfo.text}</b><br />
              Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
              Address: ${log.address || 'N/A'}<br />
-             GPS Time: ${convertedTime} (${timeAgo})
+             Received Time: ${convertedTime} (${timeAgo})
            </div>`
         );
 
@@ -288,7 +277,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   
   const terminalLogs = devices
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.recorded_at).getTime() - getNormalizedDate(b.recorded_at).getTime());
+    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
   
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
@@ -323,7 +312,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const handleExportExcel = () => {
     if (!terminalLogs || terminalLogs.length === 0) return;
 
-    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery (%)', 'GPS Time (MYT)', 'UTC Time', 'Address'];
+    const headers = ['Waypoint #', 'Device Name', 'Terminal ID', 'Latitude', 'Longitude', 'Elevation (m)', 'Temperature (°C)', 'Battery (%)', 'Received Time (MYT)', 'Address'];
     
     const rows = terminalLogs.map((log: any, idx: number) => {
       const devName = getDeviceName(log.terminal_id);
@@ -332,11 +321,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const elevation = log.elevation !== null && log.elevation !== undefined ? log.elevation : 'N/A';
       const temperature = log.temperature !== null && log.temperature !== undefined ? log.temperature : 'N/A';
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? `${getBatteryStats(log.battery_voltage).percent}%` : 'N/A';
-      const gpsTime = formatGpsTimeToMalaysia(log);
-      const utc = log.recorded_at || 'N/A';
+      const receivedTime = formatServerTimeToMalaysia(log);
       const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
 
-      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, elevation, temperature, batt, `"${gpsTime}"`, `"${utc}"`, addr].join(',');
+      return [idx + 1, `"${devName}"`, `"${log.terminal_id}"`, lat, lng, elevation, temperature, batt, `"${receivedTime}"`, addr].join(',');
     });
 
     const csvContent = [headers.join(','), ...rows].join('\n');
@@ -434,7 +422,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                       {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {getTimeAgo(log.recorded_at)}
+                      {getTimeAgo(log.timestamp_my || log.recorded_at)}
                     </div>
                   </div>
                 </button>
@@ -502,9 +490,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2 items-start">
             <div>
-              <span className="text-muted-foreground/80">GPS Time (MYT):</span>{' '}
+              <span className="text-muted-foreground/80">Received Time (MYT):</span>{' '}
               <span className="font-bold text-foreground">
-                {formatGpsTimeToMalaysia(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.recorded_at)})</span>
+                {formatServerTimeToMalaysia(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.timestamp_my || latestLog.recorded_at)})</span>
               </span>
             </div>
             <div>
