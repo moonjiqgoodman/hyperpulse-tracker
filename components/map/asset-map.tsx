@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -56,26 +55,37 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  const getNormalizedDate = (dateString: string) => {
-    if (!dateString) return new Date(0);
+  // Correctly parse Unix timestamp (handles seconds or milliseconds)
+  const getNormalizedDate = (dateInput: any) => {
+    if (!dateInput) return new Date(0);
     try {
-      if (!dateString.includes('+') && !dateString.endsWith('Z')) {
-        return new Date(dateString.replace(' ', 'T') + '+08:00');
+      // If it's a number or numeric string (Unix timestamp)
+      if (!isNaN(dateInput) && typeof Number(dateInput) === 'number' && Number(dateInput) > 0) {
+        const num = Number(dateInput);
+        // If 10 digits (seconds), convert to ms. If 13 digits (milliseconds), use as is.
+        const ms = String(num).length === 10 ? num * 1000 : num;
+        return new Date(ms);
+      }
+
+      // If it's a standard SQL date string
+      const dateStr = String(dateInput);
+      if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
+        return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
       
-      const normalizedString = dateString.endsWith('Z') || dateString.includes('+') 
-        ? dateString 
-        : dateString.replace(' ', 'T') + 'Z';
+      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
+        ? dateStr 
+        : dateStr.replace(' ', 'T') + 'Z';
       return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
     }
   };
 
-  const getTimeAgo = (dateString: string) => {
-    if (!dateString) return 'Unknown';
+  const getTimeAgo = (dateInput: any) => {
+    if (!dateInput) return 'Unknown';
     try {
-      const past = getNormalizedDate(dateString).getTime();
+      const past = getNormalizedDate(dateInput).getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
       
@@ -92,7 +102,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Format GPS / Recorded time explicitly to Malaysia Time
   const formatGpsTimeToMalaysia = (log: any) => {
     const rawTime = log.recorded_at;
     if (!rawTime) return log.timestamp_my || 'N/A';
