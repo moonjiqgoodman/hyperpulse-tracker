@@ -184,14 +184,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const map = L.map(mapContainerRef.current, {
         center: [3.1390, 101.6869],
         zoom: 6,
-        maxZoom: 22, // Allows deep zooming
+        maxZoom: 22,
         scrollWheelZoom: true,
       });
 
-      // Tile layer with maxZoom set to 22
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 22,
-        maxNativeZoom: 19, // OpenStreetMap standard native zoom is 19; browser stretches smoothly past it up to 22
+        maxNativeZoom: 19,
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
 
@@ -323,6 +322,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
+        // Automatically center the map and pan up slightly so the popup card is fully visible when clicked
+        marker.on('click', () => {
+          map.setView([lat, lng], Math.max(map.getZoom(), 19), { animate: true });
+        });
+
         layerGroup.addLayer(marker);
         markersRef.current[waypointNumber] = marker;
       });
@@ -354,7 +358,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const map = mapRef.current;
     if (!map) return;
 
-    // Increased zoom target to level 20 for a close-up when clicking individual steps
+    // Smoothly center on the waypoint and open its popup
     map.setView([lat, lng], 20, { animate: true });
 
     const marker = markersRef.current[waypointNum];
