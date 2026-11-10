@@ -258,7 +258,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
 
-        // Structured table layout with bold Address
+        // Structured table layout with bold Address and icon option properly named
         const popupContent = `
           <div style="font-size: 12px; font-family: inherit; min-width: 240px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -294,6 +294,30 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             </table>
           </div>
         `;
+
+        const customIcon = L.divIcon({
+          className: 'custom-waypoint-badge',
+          html: `
+            <div style="
+              background-color: ${markerColor};
+              color: white;
+              width: 28px;
+              height: 28px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              font-size: 12px;
+              box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+              border: 2px solid white;
+            ">
+              ${waypointNumber}
+            </div>
+          `,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
 
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
@@ -372,7 +396,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const gpsTime = formatGpsTimeToMalaysia(log);
       const receivedTime = formatServerTimeToMalaysia(log);
 
-      // Calculate gap in hours between transmit (recorded_at / GPS time) and receive (timestamp_my)
       let gapHours = 'N/A';
       try {
         const rawTransmit = log.recorded_at;
