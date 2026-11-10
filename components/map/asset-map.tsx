@@ -184,11 +184,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const map = L.map(mapContainerRef.current, {
         center: [3.1390, 101.6869],
         zoom: 6,
+        maxZoom: 22, // Allows deep zooming
         scrollWheelZoom: true,
       });
 
+      // Tile layer with maxZoom set to 22
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+        maxZoom: 22,
+        maxNativeZoom: 19, // OpenStreetMap standard native zoom is 19; browser stretches smoothly past it up to 22
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
 
@@ -258,7 +261,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
 
-        // Structured table layout with bold Address and icon option properly named
         const popupContent = `
           <div style="font-size: 12px; font-family: inherit; min-width: 240px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -352,7 +354,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const map = mapRef.current;
     if (!map) return;
 
-    map.setView([lat, lng], 18, { animate: true });
+    // Increased zoom target to level 20 for a close-up when clicking individual steps
+    map.setView([lat, lng], 20, { animate: true });
 
     const marker = markersRef.current[waypointNum];
     if (marker) {
