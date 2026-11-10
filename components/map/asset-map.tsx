@@ -56,7 +56,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  // Robust Date Normalizer supporting Unix epoch seconds & milliseconds
   const getNormalizedDate = (dateInput: any) => {
     if (!dateInput) return new Date(0);
     try {
@@ -104,8 +103,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const rawTime = log.recorded_at;
     if (!rawTime) return log.timestamp_my || 'N/A';
     try {
-      const date = getNormalizedDate(rawTime);
-      if (isNaN(date.getTime())) return rawTime;
+      const num = Number(rawTime);
+      const ms = !isNaN(num) && num > 0 
+        ? (String(num).length === 10 ? num * 1000 : num) 
+        : getNormalizedDate(rawTime).getTime();
+
+      if (isNaN(ms) || ms === 0) return String(rawTime);
+      const date = new Date(ms);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',

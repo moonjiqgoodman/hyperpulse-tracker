@@ -60,7 +60,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(timer);
   }, []);
 
-  // Robust Date Normalizer for Unix Epoch Timestamps (Seconds/Milliseconds) & SQL strings
   const getNormalizedDate = (dateInput: any) => {
     if (!dateInput) return new Date(0);
     try {
@@ -111,11 +110,16 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   };
 
   const formatToMalaysiaTime = (device: any) => {
-    const targetTimeVal = device.recorded_at || device.timestamp_my;
-    if (!targetTimeVal) return 'N/A';
+    const rawTime = device.recorded_at;
+    if (!rawTime) return device.timestamp_my || 'N/A';
     try {
-      const date = getNormalizedDate(targetTimeVal);
-      if (isNaN(date.getTime())) return String(targetTimeVal);
+      const num = Number(rawTime);
+      const ms = !isNaN(num) && num > 0 
+        ? (String(num).length === 10 ? num * 1000 : num) 
+        : getNormalizedDate(rawTime).getTime();
+
+      if (isNaN(ms) || ms === 0) return String(rawTime);
+      const date = new Date(ms);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -127,7 +131,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         hour12: false,
       }).format(date);
     } catch (e) {
-      return String(targetTimeVal);
+      return String(rawTime);
     }
   };
 
