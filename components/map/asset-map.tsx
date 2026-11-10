@@ -1,3 +1,4 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -55,19 +56,16 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  // Correctly parse Unix timestamp (handles seconds or milliseconds)
+  // Robust Date Normalizer supporting Unix epoch seconds & milliseconds
   const getNormalizedDate = (dateInput: any) => {
     if (!dateInput) return new Date(0);
     try {
-      // If it's a number or numeric string (Unix timestamp)
-      if (!isNaN(dateInput) && typeof Number(dateInput) === 'number' && Number(dateInput) > 0) {
+      if (!isNaN(dateInput) && Number(dateInput) > 0) {
         const num = Number(dateInput);
-        // If 10 digits (seconds), convert to ms. If 13 digits (milliseconds), use as is.
         const ms = String(num).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
 
-      // If it's a standard SQL date string
       const dateStr = String(dateInput);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');

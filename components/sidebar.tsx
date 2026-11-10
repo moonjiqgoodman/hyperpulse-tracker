@@ -16,7 +16,7 @@ interface DeviceLog {
   elevation?: number;
   temperature?: number;
   address: string;
-  recorded_at: string;
+  recorded_at: any;
   timestamp_my?: string;
 }
 
@@ -60,29 +60,37 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(timer);
   }, []);
 
-  const getNormalizedDate = (dateString: string) => {
-    if (!dateString) return new Date(0);
+  // Robust Date Normalizer for Unix Epoch Timestamps (Seconds/Milliseconds) & SQL strings
+  const getNormalizedDate = (dateInput: any) => {
+    if (!dateInput) return new Date(0);
     try {
-      if (!dateString.includes('+') && !dateString.endsWith('Z')) {
-        return new Date(dateString.replace(' ', 'T') + '+08:00');
+      if (!isNaN(dateInput) && Number(dateInput) > 0) {
+        const num = Number(dateInput);
+        const ms = String(num).length === 10 ? num * 1000 : num;
+        return new Date(ms);
       }
 
-      const normalizedString = dateString.endsWith('Z') || dateString.includes('+') 
-        ? dateString 
-        : dateString.replace(' ', 'T') + 'Z';
+      const dateStr = String(dateInput);
+      if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
+        return new Date(dateStr.replace(' ', 'T') + '+08:00');
+      }
+
+      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
+        ? dateStr 
+        : dateStr.replace(' ', 'T') + 'Z';
       return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
     }
   };
 
-  const isOnline = (recordedAt: string) => {
+  const isOnline = (recordedAt: any) => {
     const lastSeen = getNormalizedDate(recordedAt).getTime();
     const now = new Date().getTime();
     return (now - lastSeen) <= 24 * 60 * 60 * 1000;
   };
 
-  const getTimeAgo = (recordedAt: string) => {
+  const getTimeAgo = (recordedAt: any) => {
     if (!recordedAt) return 'Unknown';
     try {
       const past = getNormalizedDate(recordedAt).getTime();
@@ -103,29 +111,11 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   };
 
   const formatToMalaysiaTime = (device: any) => {
-    const targetTimeStr = device.timestamp_my || device.recorded_at;
-    if (targetTimeStr) {
-      try {
-        const parts = targetTimeStr.split(/[- :]/);
-        if (parts.length >= 5) {
-          const year = parts[0];
-          const monthIndex = parseInt(parts[1], 10) - 1;
-          const day = parts[2];
-          const hour = parts[3];
-          const minute = parts[4];
-          
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          return `${day} ${months[monthIndex]} ${year}, ${hour}:${minute}`;
-        }
-      } catch (e) {
-        // Fallthrough
-      }
-    }
-
-    if (!device.recorded_at) return 'N/A';
+    const targetTimeVal = device.recorded_at || device.timestamp_my;
+    if (!targetTimeVal) return 'N/A';
     try {
-      const date = getNormalizedDate(device.recorded_at);
-      if (isNaN(date.getTime())) return device.recorded_at;
+      const date = getNormalizedDate(targetTimeVal);
+      if (isNaN(date.getTime())) return String(targetTimeVal);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -137,17 +127,16 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         hour12: false,
       }).format(date);
     } catch (e) {
-      return device.recorded_at;
+      return String(targetTimeVal);
     }
   };
 
-  // Helper to compute average message interval/frequency for a specific terminal ID
   const getDeviceFrequencyInfo = (terminalId: string) => {
     const deviceLogs = devices.filter(d => String(d.terminal_id).trim() === String(terminalId).trim());
     if (deviceLogs.length <= 1) return 'First msg';
 
     const timestamps = deviceLogs
-      .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
+      .map(d => getNormalizedDate(d.recorded_at).getTime())
       .filter(t => !isNaN(t) && t > 0)
       .sort((a, b) => a - b);
 
@@ -179,7 +168,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   const deviceList = Array.from(uniqueDevicesMap.values());
 
   const filteredDevices = deviceList.filter((device) => {
-    const online = isOnline(device.timestamp_my || device.recorded_at);
+    const online = isOnline(device.recorded_at);
     if (filter === 'ONLINE') return online;
     if (filter === 'OFFLINE') return !online;
     return true;
@@ -199,7 +188,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         md:relative md:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        {/* Brand Header */}
         <div className="p-4 border-b border-border flex flex-col gap-3">
           <div className="flex flex-col items-center justify-center text-center gap-1.5 relative">
             <span className="absolute right-0 top-0 text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
@@ -236,7 +224,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           </div>
         </div>
 
-        {/* Device List Section with Frequency, Elevation, and Temperature */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
           {filteredDevices.length === 0 ? (
             <div className="text-center text-muted-foreground text-xs py-10">
@@ -244,9 +231,9 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </div>
           ) : (
             filteredDevices.map((device) => {
-              const online = isOnline(device.timestamp_my || device.recorded_at);
+              const online = isOnline(device.recorded_at);
               const isSelected = selectedDevice === device.terminal_id;
-              const timeAgoText = getTimeAgo(device.timestamp_my || device.recorded_at);
+              const timeAgoText = getTimeAgo(device.recorded_at);
               const malaysiaTimeText = formatToMalaysiaTime(device);
               const friendlyName = deviceNames[device.terminal_id];
               const frequencyText = getDeviceFrequencyInfo(device.terminal_id);
@@ -298,7 +285,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                     {device.address || 'Unknown location'}
                   </p>
 
-                  {/* Telemetry Stats: Elevation, Temperature, and Message Rate */}
                   <div className="grid grid-cols-3 gap-1 py-1 px-1.5 bg-background/60 rounded border border-border/40 text-[9px] font-mono mb-1.5">
                     <div className="flex items-center gap-1 text-foreground" title="Elevation">
                       <FontAwesomeIcon icon={faMountain} className="text-amber-600 h-2.5 w-2.5" />
@@ -324,7 +310,6 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
           )}
         </div>
 
-        {/* Bottom Navigation & Management Links */}
         <div className="p-3 border-t border-border bg-card/50 flex flex-col gap-1.5 shrink-0">
           <Link
             href="/devices"
