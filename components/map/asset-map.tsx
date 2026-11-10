@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -73,7 +72,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Time-ago based on when server received data
   const getServerTimeAgo = (timestampMy: string) => {
     if (!timestampMy) return 'Unknown';
     try {
@@ -94,7 +92,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Format Unix epoch timestamp (seconds or ms) from packet to Malaysia Time for Map Popups
   const formatGpsTimeToMalaysia = (log: any) => {
     const rawTime = log.recorded_at;
     if (!rawTime) return 'N/A';
@@ -251,7 +248,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const deviceName = getDeviceName(log.terminal_id);
 
         const gpsTime = formatGpsTimeToMalaysia(log);
-        const timeAgo = getServerTimeAgo(log.timestamp_my);
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
@@ -280,16 +276,44 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           iconAnchor: [14, 14],
         });
 
-        const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(
-          `<div style="font-size: 12px; line-height: 1.4;">
-             <b>Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}</b><br />
-             Device Name: <b>${deviceName}</b><br />
-             Battery: <b>${batteryInfo.text}</b><br />
-             Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
-             Address: ${log.address || 'N/A'}<br />
-             GPS Time: <b>${gpsTime}</b>
-           </div>`
-        );
+        // Structured table layout inside the Leaflet Popup
+        const popupContent = `
+          <div style="font-size: 12px; font-family: inherit; min-width: 240px;">
+            <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
+              Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}
+            </div>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280; width: 35%;">Device:</td>
+                  <td style="padding: 2px 0; font-weight: 600;">${deviceName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280;">Battery:</td>
+                  <td style="padding: 2px 0; font-weight: 600;">${batteryInfo.text}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280;">Elevation:</td>
+                  <td style="padding: 2px 0; font-weight: 600;">${elevationStr}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280;">Temp:</td>
+                  <td style="padding: 2px 0; font-weight: 600;">${tempStr}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280; vertical-align: top;">Address:</td>
+                  <td style="padding: 2px 0; line-height: 1.3;">${log.address || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold;">GPS Time:</td>
+                  <td style="padding: 4px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb;">${gpsTime}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
         layerGroup.addLayer(marker);
         markersRef.current[waypointNumber] = marker;
