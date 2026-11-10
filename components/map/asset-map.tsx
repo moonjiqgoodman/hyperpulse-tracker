@@ -56,16 +56,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
-  const getNormalizedDate = (dateInput: any) => {
-    if (!dateInput) return new Date(0);
+  const getNormalizedDate = (dateString: string) => {
+    if (!dateString) return new Date(0);
     try {
-      if (!isNaN(dateInput) && Number(dateInput) > 0) {
-        const num = Number(dateInput);
-        const ms = String(num).length === 10 ? num * 1000 : num;
-        return new Date(ms);
-      }
-
-      const dateStr = String(dateInput);
+      const dateStr = String(dateString);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -79,10 +73,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const getTimeAgo = (dateInput: any) => {
-    if (!dateInput) return 'Unknown';
+  // Time-ago based on when server received data
+  const getServerTimeAgo = (timestampMy: string) => {
+    if (!timestampMy) return 'Unknown';
     try {
-      const past = getNormalizedDate(dateInput).getTime();
+      const past = getNormalizedDate(timestampMy).getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
       
@@ -99,7 +94,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // Format GPS timestamp (from packet time / recorded_at) to Malaysia Time
+  // Format Unix epoch timestamp (seconds or ms) from packet to Malaysia Time for Map Popups
   const formatGpsTimeToMalaysia = (log: any) => {
     const rawTime = log.recorded_at;
     if (!rawTime) return 'N/A';
@@ -227,7 +222,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const terminalLogs = devices
         .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-        .sort((a: any, b: any) => getNormalizedDate(a.recorded_at).getTime() - getNormalizedDate(b.recorded_at).getTime());
+        .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
 
       if (terminalLogs.length === 0) return;
 
@@ -256,7 +251,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const deviceName = getDeviceName(log.terminal_id);
 
         const gpsTime = formatGpsTimeToMalaysia(log);
-        const timeAgo = getTimeAgo(log.recorded_at);
+        const timeAgo = getServerTimeAgo(log.timestamp_my);
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
@@ -292,7 +287,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
              Battery: <b>${batteryInfo.text}</b><br />
              Elevation: <b>${elevationStr}</b> | Temp: <b>${tempStr}</b><br />
              Address: ${log.address || 'N/A'}<br />
-             GPS Time: ${gpsTime} (${timeAgo})
+             GPS Time: <b>${gpsTime}</b>
            </div>`
         );
 
@@ -311,7 +306,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   
   const terminalLogs = devices
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.recorded_at).getTime() - getNormalizedDate(b.recorded_at).getTime());
+    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
   
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
@@ -457,7 +452,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                       {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {getTimeAgo(log.recorded_at)}
+                      {getServerTimeAgo(log.timestamp_my)}
                     </div>
                   </div>
                 </button>
@@ -527,7 +522,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <div>
               <span className="text-muted-foreground/80">Received Time (MYT):</span>{' '}
               <span className="font-bold text-foreground">
-                {formatServerTimeToMalaysia(latestLog)} <span className="text-muted-foreground font-normal">({getTimeAgo(latestLog.timestamp_my)})</span>
+                {formatServerTimeToMalaysia(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
               </span>
             </div>
             <div>
