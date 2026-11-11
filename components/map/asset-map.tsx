@@ -38,10 +38,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [isDeleting, setIsDeleting] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Playback Animation States
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlaybackIndex, setCurrentPlaybackIndex] = useState<number | null>(null);
   const playbackTimerRef = useRef<any>(null);
+  const popupTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -58,6 +58,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     setIsPlaying(false);
     setCurrentPlaybackIndex(null);
     if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+    if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
   }
 
   const handleCopyText = (text: string, key: string) => {
@@ -252,7 +253,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         parseFloat(log.longitude),
       ]);
 
-      // Base background dashed polyline (dimmed route)
       const dashedPolyline = L.polyline(latLngs, {
         color: '#94a3b8',
         weight: 3,
@@ -263,7 +263,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       layerGroup.addLayer(dashedPolyline);
       polylineRef.current = dashedPolyline;
 
-      // Active progress dashed polyline along the route up to currentPlaybackIndex
       const activeProgressIndices = currentPlaybackIndex !== null ? Math.max(1, currentPlaybackIndex + 1) : terminalLogs.length;
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
@@ -380,7 +379,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
         marker.on('click', () => {
-          map.setView([lat, lng], Math.max(map.getZoom(), 19), { animate: true });
+          // Calculate precise vertical offset so marker sits dead center of the map view accounting for popup card height (~120px offset)
+          const mapInstance = mapRef.current;
+          if (mapInstance) {
+            const targetPoint = mapInstance.project([lat, lng], 20).subtract([0, 100]);
+            const targetLatLng = mapInstance.unproject(targetPoint, 20);
+            mapInstance.setView(targetLatLng, 20, { animate: true });
+          }
         });
 
         layerGroup.addLayer(marker);
@@ -394,10 +399,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     });
   }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex]);
 
-  // Handle Playback Animation Effect
+  // Handle Playback Animation Effect (7 seconds duration per waypoint step)
   useEffect(() => {
     if (!isPlaying || terminalLogs.length === 0) {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+      if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
       return;
     }
 
@@ -414,14 +420,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 1200);
+    }, 7000); // exactly 7 seconds per step
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely)
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open for 7s)
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -433,7 +439,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
     const map = mapRef.current;
     if (map) {
-      map.setView([lat, lng], 19, { animate: true });
+      // Pan and shift down so marker is precisely in the absolute center of the map viewport
+      const targetPoint = map.project([lat, lng], 20).subtract([0, 100]);
+      const targetLatLng = map.unproject(targetPoint, 20);
+      map.setView(targetLatLng, 20, { animate: true });
+
       const marker = markersRef.current[waypointNum];
       if (marker) {
         marker.openPopup();
@@ -444,6 +454,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const togglePlayAnimation = () => {
     if (isPlaying) {
       setIsPlaying(false);
+      if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
     } else {
       if (currentPlaybackIndex === null || currentPlaybackIndex >= terminalLogs.length - 1) {
         setCurrentPlaybackIndex(0);
@@ -455,6 +466,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const resetPlayAnimation = () => {
     setIsPlaying(false);
     setCurrentPlaybackIndex(0);
+    if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
     if (terminalLogs.length > 0) {
       handleZoomToWaypoint(1, parseFloat(terminalLogs[0].latitude), parseFloat(terminalLogs[0].longitude));
     }
@@ -473,10 +485,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
     setIsPlaying(false);
     setCurrentPlaybackIndex(waypointNum - 1);
+    if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
     const map = mapRef.current;
     if (!map) return;
 
-    map.setView([lat, lng], 20, { animate: true });
+    const targetPoint = map.project([lat, lng], 20).subtract([0, 100]);
+    const targetLatLng = map.unproject(targetPoint, 20);
+    map.setView(targetLatLng, 20, { animate: true });
 
     const marker = markersRef.current[waypointNum];
     if (marker) {
@@ -602,14 +617,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <div className="flex items-center gap-1.5 ml-2">
                 <button
                   onClick={togglePlayAnimation}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-black transition-colors cursor-pointer shadow-xs ${
-                    isPlaying ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-xs ${
+                    isPlaying ? 'bg-amber-500 hover:bg-amber-600 text-black font-bold' : 'bg-primary hover:bg-primary/90 text-black font-bold'
                   }`}
                   style={{ color: '#000000' }}
                   title={isPlaying ? 'Pause Animation' : 'Play Waypoint Animation'}
                 >
-                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3" />
-                  <span className="font-bold">{isPlaying ? 'Pause' : 'Play'}</span>
+                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3 text-black" />
+                  <span>{isPlaying ? 'Pause' : 'Play'}</span>
                 </button>
                 <button
                   onClick={resetPlayAnimation}
