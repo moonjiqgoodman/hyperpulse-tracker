@@ -1,9 +1,10 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow, faCopy, faCheck } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow, faPlay, faPause, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -37,6 +38,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [isDeleting, setIsDeleting] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Playback Animation States
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlaybackIndex, setCurrentPlaybackIndex] = useState<number | null>(null);
+  const playbackTimerRef = useRef<any>(null);
+
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -49,6 +55,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   if (prevSelectedDeviceRef.current !== selectedDevice) {
     prevSelectedDeviceRef.current = selectedDevice;
     hasFittedBoundsRef.current = false;
+    setIsPlaying(false);
+    setCurrentPlaybackIndex(null);
+    if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
   }
 
   const handleCopyText = (text: string, key: string) => {
@@ -220,6 +229,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     };
   }, [isClient]);
 
+  const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
+  
+  const terminalLogs = devices
+    .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
+    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
+
   useEffect(() => {
     if (!isClient) return;
     const map = mapRef.current;
@@ -230,15 +245,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       layerGroup.clearLayers();
       markersRef.current = {};
 
-      if (!Array.isArray(devices) || devices.length === 0) return;
-
-      const targetTerminal = selectedDevice || devices[0]?.terminal_id;
-
-      const terminalLogs = devices
-        .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-        .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
-
-      if (terminalLogs.length === 0) return;
+      if (!Array.isArray(devices) || devices.length === 0 || terminalLogs.length === 0) return;
 
       const latLngs: [number, number][] = terminalLogs.map((log: any) => [
         parseFloat(log.latitude),
@@ -321,7 +328,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </table>
         `;
 
-        // Attach click event listener for copy inside map popup safely
         setTimeout(() => {
           const btn = popupContent.querySelector(`#copy-btn-${waypointNumber}`);
           if (btn) {
@@ -373,12 +379,73 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     });
   }, [devices, selectedDevice, registeredDevices, isClient, copiedKey]);
 
-  const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
-  
-  const terminalLogs = devices
-    .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
-  
+  // Handle Playback Animation Effect
+  useEffect(() => {
+    if (!isPlaying || terminalLogs.length === 0) {
+      if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+      return;
+    }
+
+    // Start from beginning if not set or finished
+    if (currentPlaybackIndex === null || currentPlaybackIndex >= terminalLogs.length) {
+      setCurrentPlaybackIndex(0);
+    }
+
+    playbackTimerRef.current = setInterval(() => {
+      setCurrentPlaybackIndex((prevIndex) => {
+        if (prevIndex === null || prevIndex + 1 >= terminalLogs.length) {
+          setIsPlaying(false);
+          clearInterval(playbackTimerRef.current);
+          return terminalLogs.length - 1;
+        }
+        return prevIndex + 1;
+      });
+    }, 1200); // 1.2 seconds per waypoint step
+
+    return () => {
+      if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+    };
+  }, [isPlaying, terminalLogs.length]);
+
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback
+  useEffect(() => {
+    if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
+    const log = terminalLogs[currentPlaybackIndex];
+    if (!log) return;
+
+    const waypointNum = currentPlaybackIndex + 1;
+    const lat = parseFloat(log.latitude);
+    const lng = parseFloat(log.longitude);
+
+    const map = mapRef.current;
+    if (map) {
+      map.setView([lat, lng], 19, { animate: true });
+      const marker = markersRef.current[waypointNum];
+      if (marker) {
+        marker.openPopup();
+      }
+    }
+  }, [currentPlaybackIndex, terminalLogs]);
+
+  const togglePlayAnimation = () => {
+    if (isPlaying) {
+      setIsPlaying(false);
+    } else {
+      if (currentPlaybackIndex === null || currentPlaybackIndex >= terminalLogs.length - 1) {
+        setCurrentPlaybackIndex(0);
+      }
+      setIsPlaying(true);
+    }
+  };
+
+  const resetPlayAnimation = () => {
+    setIsPlaying(false);
+    setCurrentPlaybackIndex(0);
+    if (terminalLogs.length > 0) {
+      handleZoomToWaypoint(1, parseFloat(terminalLogs[0].latitude), parseFloat(terminalLogs[0].longitude));
+    }
+  };
+
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
@@ -390,6 +457,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const tempAnimClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500 font-semibold' : 'text-blue-400';
 
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
+    setIsPlaying(false);
+    setCurrentPlaybackIndex(waypointNum - 1);
     const map = mapRef.current;
     if (!map) return;
 
@@ -513,7 +582,31 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     <div className="space-y-4">
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
-          <span>Waypoint:</span>
+          <div className="flex items-center gap-2">
+            <span>Waypoint:</span>
+            {terminalLogs.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-2">
+                <button
+                  onClick={togglePlayAnimation}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-white transition-colors cursor-pointer shadow-xs ${
+                    isPlaying ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary hover:bg-primary/90'
+                  }`}
+                  title={isPlaying ? 'Pause Animation' : 'Play Waypoint Animation'}
+                >
+                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3" />
+                  <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                </button>
+                <button
+                  onClick={resetPlayAnimation}
+                  className="flex items-center gap-1 bg-muted hover:bg-muted/80 text-foreground px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer border border-border"
+                  title="Reset Playback"
+                >
+                  <FontAwesomeIcon icon={faRotateRight} className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2.5">
             <span className="font-mono">{terminalLogs.length} Waypoints</span>
             {terminalLogs.length > 0 && (
@@ -544,6 +637,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             const isLast = idx === terminalLogs.length - 1;
             const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
             const waypointNum = idx + 1;
+            const isHighlighted = currentPlaybackIndex === idx;
 
             return (
               <React.Fragment key={idx}>
@@ -554,7 +648,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 )}
                 <button
                   onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
-                  className="group flex items-center gap-2.5 bg-background hover:bg-muted/80 border border-border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0"
+                  className={`group flex items-center gap-2.5 border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0 ${
+                    isHighlighted 
+                      ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
+                      : 'bg-background hover:bg-muted/80 border-border'
+                  }`}
                   title={`Focus on Waypoint #${waypointNum}`}
                 >
                   <span 
