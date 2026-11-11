@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -422,7 +421,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely)
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -603,13 +602,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <div className="flex items-center gap-1.5 ml-2">
                 <button
                   onClick={togglePlayAnimation}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-white transition-colors cursor-pointer shadow-xs ${
-                    isPlaying ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary hover:bg-primary/90'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-black transition-colors cursor-pointer shadow-xs ${
+                    isPlaying ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                   }`}
+                  style={{ color: '#000000' }}
                   title={isPlaying ? 'Pause Animation' : 'Play Waypoint Animation'}
                 >
                   <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3" />
-                  <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                  <span className="font-bold">{isPlaying ? 'Pause' : 'Play'}</span>
                 </button>
                 <button
                   onClick={resetPlayAnimation}
