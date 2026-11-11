@@ -98,7 +98,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // 12-hour AM/PM Malaysia Time formatter for GPS/Transmit Time
   const formatGpsTimeToMalaysia12Hour = (log: any) => {
     const rawTime = log.recorded_at;
     if (!rawTime) return 'N/A';
@@ -126,7 +125,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  // 12-hour AM/PM Malaysia Time formatter for Server Received Time
   const formatServerTimeToMalaysia12Hour = (log: any) => {
     const targetTime = log.timestamp_my;
     if (!targetTime) return 'N/A';
@@ -261,8 +259,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
+        const latLngStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-        // Popup table including Coordinates (Lat, Long), Address, and GPS Time
+        // Replaced "GPS Time:" label with "Last Seen:" displaying coordinates and AM/PM time
         const popupContent = `
           <div style="font-size: 12px; font-family: inherit; min-width: 250px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -280,7 +279,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 </tr>
                 <tr>
                   <td style="padding: 2px 0; color: #6b7280;">Coordinates:</td>
-                  <td style="padding: 2px 0; font-family: monospace; font-weight: 600;">${lat.toFixed(6)}, ${lng.toFixed(6)}</td>
+                  <td style="padding: 2px 0; font-family: monospace; font-weight: 600;">${latLngStr}</td>
                 </tr>
                 <tr>
                   <td style="padding: 2px 0; color: #6b7280;">Elevation:</td>
@@ -295,8 +294,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                   <td style="padding: 2px 0; font-weight: bold; line-height: 1.3;">${log.address || 'N/A'}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 4px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold;">GPS Time:</td>
-                  <td style="padding: 4px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb;">${gpsTime}</td>
+                  <td style="padding: 4px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold;">Last Seen:</td>
+                  <td style="padding: 4px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb; font-family: monospace; font-size: 11px;">${latLngStr}, ${gpsTime}</td>
                 </tr>
               </tbody>
             </table>
