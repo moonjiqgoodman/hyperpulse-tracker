@@ -98,7 +98,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const formatGpsTimeToMalaysia = (log: any) => {
+  // 12-hour AM/PM Malaysia Time formatter for GPS/Transmit Time
+  const formatGpsTimeToMalaysia12Hour = (log: any) => {
     const rawTime = log.recorded_at;
     if (!rawTime) return 'N/A';
     try {
@@ -118,14 +119,15 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
+        hour12: true,
       }).format(date) + ' (GMT+8)';
     } catch (e) {
       return String(rawTime);
     }
   };
 
-  const formatServerTimeToMalaysia = (log: any) => {
+  // 12-hour AM/PM Malaysia Time formatter for Server Received Time
+  const formatServerTimeToMalaysia12Hour = (log: any) => {
     const targetTime = log.timestamp_my;
     if (!targetTime) return 'N/A';
     try {
@@ -140,7 +142,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
+        hour12: true,
       }).format(date) + ' (GMT+8)';
     } catch (e) {
       return targetTime;
@@ -255,13 +257,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const markerColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[index % WAYPOINT_COLORS.length];
         const deviceName = getDeviceName(log.terminal_id);
 
-        const gpsTime = formatGpsTimeToMalaysia(log);
+        const gpsTime = formatGpsTimeToMalaysia12Hour(log);
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
 
+        // Popup table including Coordinates (Lat, Long), Address, and GPS Time
         const popupContent = `
-          <div style="font-size: 12px; font-family: inherit; min-width: 240px;">
+          <div style="font-size: 12px; font-family: inherit; min-width: 250px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
               Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}
             </div>
@@ -274,6 +277,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <tr>
                   <td style="padding: 2px 0; color: #6b7280;">Battery:</td>
                   <td style="padding: 2px 0; font-weight: 600;">${batteryInfo.text}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 0; color: #6b7280;">Coordinates:</td>
+                  <td style="padding: 2px 0; font-family: monospace; font-weight: 600;">${lat.toFixed(6)}, ${lng.toFixed(6)}</td>
                 </tr>
                 <tr>
                   <td style="padding: 2px 0; color: #6b7280;">Elevation:</td>
@@ -322,7 +329,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
-        // Automatically center the map and pan up slightly so the popup card is fully visible when clicked
         marker.on('click', () => {
           map.setView([lat, lng], Math.max(map.getZoom(), 19), { animate: true });
         });
@@ -358,7 +364,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const map = mapRef.current;
     if (!map) return;
 
-    // Smoothly center on the waypoint and open its popup
     map.setView([lat, lng], 20, { animate: true });
 
     const marker = markersRef.current[waypointNum];
@@ -400,8 +405,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const elevation = log.elevation !== null && log.elevation !== undefined ? log.elevation : 'N/A';
       const temperature = log.temperature !== null && log.temperature !== undefined ? log.temperature : 'N/A';
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? `${getBatteryStats(log.battery_voltage).percent}%` : 'N/A';
-      const gpsTime = formatGpsTimeToMalaysia(log);
-      const receivedTime = formatServerTimeToMalaysia(log);
+      const gpsTime = formatGpsTimeToMalaysia12Hour(log);
+      const receivedTime = formatServerTimeToMalaysia12Hour(log);
 
       let gapHours = 'N/A';
       try {
@@ -602,9 +607,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2 items-start">
             <div>
-              <span className="text-muted-foreground/80">Received Time (MYT):</span>{' '}
+              <span className="text-muted-foreground/80">Last Seen:</span>{' '}
               <span className="font-bold text-foreground">
-                {formatServerTimeToMalaysia(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
+                {formatServerTimeToMalaysia12Hour(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
               </span>
             </div>
             <div>
