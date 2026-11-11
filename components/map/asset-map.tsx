@@ -1,3 +1,4 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -263,7 +264,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       layerGroup.addLayer(dashedPolyline);
       polylineRef.current = dashedPolyline;
 
-      // Active progress dashed polyline (starts empty or with current index)
+      // Active progress dashed polyline along the route up to currentPlaybackIndex
       const activeProgressIndices = currentPlaybackIndex !== null ? Math.max(1, currentPlaybackIndex + 1) : terminalLogs.length;
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
@@ -796,7 +797,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 onClick={() => setIsResetModalOpen(false)}
                 className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer"
               >
-                Cancel>
+                Cancel
               </button>
               <button
                 onClick={handleConfirmReset}
