@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow } from '@fortawesome/free-solid-svg-icons';
+import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow, faCopy, faCheck } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -35,6 +35,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -49,6 +50,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     prevSelectedDeviceRef.current = selectedDevice;
     hasFittedBoundsRef.current = false;
   }
+
+  const handleCopyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
+  };
 
   const getDeviceName = (terminalId: string) => {
     const found = registeredDevices.find(d => String(d.terminal_id).trim() === String(terminalId).trim());
@@ -261,7 +270,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
         const latLngStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-        // Replaced "GPS Time:" label with "Last Seen:" displaying coordinates and AM/PM time
         const popupContent = `
           <div style="font-size: 12px; font-family: inherit; min-width: 250px;">
             <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -570,51 +578,73 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           No waypoints found. Select a device from the sidebar or wait for incoming packets.
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
-          <div className="absolute top-3 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20 -mt-1">
+        <div className="bg-muted p-4 rounded-xl space-y-3 border border-border relative text-xs">
+          <div className="absolute top-3 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-28">
-            <div>
+            <div className="text-muted-foreground">
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
-            <div>
+            <div className="text-muted-foreground">
               Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono">
-            <div>
-              <span className="text-muted-foreground/80">Latest Coordinates:</span>{' '}
-              <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
-              <div className="inline-flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 font-bold text-amber-600">
-                  <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
-                  {latestElevation}
-                </span>
-                <span className="text-muted-foreground">/</span>
-                <span className={`inline-flex items-center gap-1 font-bold ${tempAnimClass}`}>
-                  <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-3 w-3" />
-                  {latestTemp}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2 items-start">
-            <div>
-              <span className="text-muted-foreground/80">Last Seen:</span>{' '}
-              <span className="font-bold text-foreground">
-                {formatServerTimeToMalaysia12Hour(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground/80">Last Address:</span>{' '}
-              <span className="font-bold text-foreground leading-relaxed block sm:inline">{latestLog.address || 'N/A'}</span>
-            </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse font-mono">
+              <tbody>
+                <tr className="border-b border-border/40">
+                  <td className="py-2 pr-4 text-muted-foreground/80 w-[140px] font-sans font-semibold">Latest Coordinates:</td>
+                  <td className="py-2 pr-2 text-foreground font-bold">
+                    {latestLog.latitude}, {latestLog.longitude}
+                  </td>
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => handleCopyText(`${latestLog.latitude}, ${latestLog.longitude}`, 'coords')}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-card border border-border text-foreground transition-colors cursor-pointer text-[11px]"
+                      title="Copy coordinates"
+                    >
+                      <FontAwesomeIcon icon={copiedKey === 'coords' ? faCheck : faCopy} className={`h-3 w-3 ${copiedKey === 'coords' ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+                      <span>{copiedKey === 'coords' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </td>
+                </tr>
+
+                <tr className="border-b border-border/40">
+                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold">Elevation & Temp:</td>
+                  <td className="py-2 pr-2 font-bold" colSpan={2}>
+                    <div className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 text-amber-600">
+                        <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
+                        {latestElevation}
+                      </span>
+                      <span className="text-muted-foreground">/</span>
+                      <span className={`inline-flex items-center gap-1 ${tempAnimClass}`}>
+                        <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-3 w-3" />
+                        {latestTemp}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr className="border-b border-border/40">
+                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold">Last Updated:</td>
+                  <td className="py-2 pr-2 text-foreground font-bold" colSpan={2}>
+                    {formatServerTimeToMalaysia12Hour(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold align-top pt-2.5">Last Address:</td>
+                  <td className="py-2 pr-2 text-foreground font-bold leading-relaxed pt-2.5" colSpan={2}>
+                    {latestLog.address || 'N/A'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       )}
