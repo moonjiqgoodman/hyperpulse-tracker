@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -27,6 +26,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const layerGroupRef = useRef<any | null>(null);
   const markersRef = useRef<{ [key: number]: any }>({});
   const polylineRef = useRef<any | null>(null);
+  const animatedPolylineRef = useRef<any | null>(null);
   const hasFittedBoundsRef = useRef(false);
   const prevSelectedDeviceRef = useRef(selectedDevice);
 
@@ -252,15 +252,30 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         parseFloat(log.longitude),
       ]);
 
+      // Base background dashed polyline (dimmed route)
       const dashedPolyline = L.polyline(latLngs, {
-        color: '#2563eb',
-        weight: 4,
-        opacity: 0.7,
+        color: '#94a3b8',
+        weight: 3,
+        opacity: 0.4,
         dashArray: '1, 12',
         lineCap: 'round',
       });
       layerGroup.addLayer(dashedPolyline);
       polylineRef.current = dashedPolyline;
+
+      // Active progress dashed polyline (starts empty or with current index)
+      const activeProgressIndices = currentPlaybackIndex !== null ? Math.max(1, currentPlaybackIndex + 1) : terminalLogs.length;
+      const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
+
+      const animatedPolyline = L.polyline(currentSegmentLatLngs, {
+        color: '#2563eb',
+        weight: 4,
+        opacity: 0.9,
+        dashArray: '1, 12',
+        lineCap: 'round',
+      });
+      layerGroup.addLayer(animatedPolyline);
+      animatedPolylineRef.current = animatedPolyline;
 
       terminalLogs.forEach((log: any, index: number) => {
         const lat = parseFloat(log.latitude);
@@ -319,7 +334,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <td style="padding: 6px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold; vertical-align: middle;">Last Seen:</td>
                 <td style="padding: 6px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb; font-family: monospace; font-size: 11px; vertical-align: middle;">
                   <span id="seen-text-${waypointNumber}">${copyTextVal}</span>
-                  <button id="copy-btn-${waypointNumber}" style="margin-left: 6px; padding: 2px 6px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; color: #374151;">
+                  <button id="copy-btn-${waypointNumber}" style="margin-left: 6px; padding: 2px 6px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; color: #000000;">
                     ${isCopied ? 'Copied' : 'Copy'}
                   </button>
                 </td>
@@ -377,7 +392,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hasFittedBoundsRef.current = true;
       }
     });
-  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey]);
+  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex]);
 
   // Handle Playback Animation Effect
   useEffect(() => {
@@ -386,8 +401,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       return;
     }
 
-    // Start from beginning if not set or finished
-    if (currentPlaybackIndex === null || currentPlaybackIndex >= terminalLogs.length) {
+    if (currentPlaybackIndex === null || currentPlaybackIndex >= terminalLogs.length - 1) {
       setCurrentPlaybackIndex(0);
     }
 
@@ -400,7 +414,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 1200); // 1.2 seconds per waypoint step
+    }, 1200);
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
@@ -782,7 +796,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 onClick={() => setIsResetModalOpen(false)}
                 className="px-4 py-2 rounded-md border border-border bg-background text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer"
               >
-                Cancel
+                Cancel>
               </button>
               <button
                 onClick={handleConfirmReset}
