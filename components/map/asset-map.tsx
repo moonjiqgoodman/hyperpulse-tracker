@@ -269,46 +269,68 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
         const latLngStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        const copyTextVal = `${latLngStr}, ${gpsTime}`;
+        const copyKeyId = `waypoint-${waypointNumber}`;
+        const isCopied = copiedKey === copyKeyId;
 
-        const popupContent = `
-          <div style="font-size: 12px; font-family: inherit; min-width: 250px;">
-            <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
-              Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}
-            </div>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280; width: 35%;">Device:</td>
-                  <td style="padding: 2px 0; font-weight: 600;">${deviceName}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280;">Battery:</td>
-                  <td style="padding: 2px 0; font-weight: 600;">${batteryInfo.text}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280;">Coordinates:</td>
-                  <td style="padding: 2px 0; font-family: monospace; font-weight: 600;">${latLngStr}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280;">Elevation:</td>
-                  <td style="padding: 2px 0; font-weight: 600;">${elevationStr}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280;">Temp:</td>
-                  <td style="padding: 2px 0; font-weight: 600;">${tempStr}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 2px 0; color: #6b7280; vertical-align: top; font-weight: bold;">Address:</td>
-                  <td style="padding: 2px 0; font-weight: bold; line-height: 1.3;">${log.address || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 4px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold;">Last Seen:</td>
-                  <td style="padding: 4px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb; font-family: monospace; font-size: 11px;">${latLngStr}, ${gpsTime}</td>
-                </tr>
-              </tbody>
-            </table>
+        const popupContent = document.createElement('div');
+        popupContent.style.fontSize = '12px';
+        popupContent.style.fontFamily = 'inherit';
+        popupContent.style.minWidth = '260px';
+
+        popupContent.innerHTML = `
+          <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
+            Waypoint #${waypointNumber} ${isLatest ? '(Latest)' : ''}
           </div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tbody>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280; width: 35%;">Device:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${deviceName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Battery:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${batteryInfo.text}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Coordinates:</td>
+                <td style="padding: 2px 0; font-family: monospace; font-weight: 600;">${latLngStr}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Elevation:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${elevationStr}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Temp:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${tempStr}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280; vertical-align: top; font-weight: bold;">Address:</td>
+                <td style="padding: 2px 0; font-weight: bold; line-height: 1.3;">${log.address || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold; vertical-align: middle;">Last Seen:</td>
+                <td style="padding: 6px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb; font-family: monospace; font-size: 11px; vertical-align: middle;">
+                  <span id="seen-text-${waypointNumber}">${copyTextVal}</span>
+                  <button id="copy-btn-${waypointNumber}" style="margin-left: 6px; padding: 2px 6px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; color: #374151;">
+                    ${isCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         `;
+
+        // Attach click event listener for copy inside map popup safely
+        setTimeout(() => {
+          const btn = popupContent.querySelector(`#copy-btn-${waypointNumber}`);
+          if (btn) {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              handleCopyText(copyTextVal, copyKeyId);
+            });
+          }
+        }, 50);
 
         const customIcon = L.divIcon({
           className: 'custom-waypoint-badge',
@@ -349,7 +371,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hasFittedBoundsRef.current = true;
       }
     });
-  }, [devices, selectedDevice, registeredDevices, isClient]);
+  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey]);
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
   
@@ -578,73 +600,51 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           No waypoints found. Select a device from the sidebar or wait for incoming packets.
         </div>
       ) : (
-        <div className="bg-muted p-4 rounded-xl space-y-3 border border-border relative text-xs">
-          <div className="absolute top-3 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20">
+        <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
+          <div className="absolute top-3 right-4 flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-1.5 rounded-full border border-border shadow-sm font-mono z-20 -mt-1">
             <FontAwesomeIcon icon={latestBattery.icon} className={`h-4 w-4 ${latestBattery.color}`} />
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-28">
-            <div className="text-muted-foreground">
+            <div>
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
-            <div className="text-muted-foreground">
+            <div>
               Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
             </div>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse font-mono">
-              <tbody>
-                <tr className="border-b border-border/40">
-                  <td className="py-2 pr-4 text-muted-foreground/80 w-[140px] font-sans font-semibold">Latest Coordinates:</td>
-                  <td className="py-2 pr-2 text-foreground font-bold">
-                    {latestLog.latitude}, {latestLog.longitude}
-                  </td>
-                  <td className="py-2 text-right">
-                    <button
-                      onClick={() => handleCopyText(`${latestLog.latitude}, ${latestLog.longitude}`, 'coords')}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background hover:bg-card border border-border text-foreground transition-colors cursor-pointer text-[11px]"
-                      title="Copy coordinates"
-                    >
-                      <FontAwesomeIcon icon={copiedKey === 'coords' ? faCheck : faCopy} className={`h-3 w-3 ${copiedKey === 'coords' ? 'text-emerald-500' : 'text-muted-foreground'}`} />
-                      <span>{copiedKey === 'coords' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </td>
-                </tr>
-
-                <tr className="border-b border-border/40">
-                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold">Elevation & Temp:</td>
-                  <td className="py-2 pr-2 font-bold" colSpan={2}>
-                    <div className="inline-flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 text-amber-600">
-                        <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
-                        {latestElevation}
-                      </span>
-                      <span className="text-muted-foreground">/</span>
-                      <span className={`inline-flex items-center gap-1 ${tempAnimClass}`}>
-                        <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-3 w-3" />
-                        {latestTemp}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr className="border-b border-border/40">
-                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold">Last Updated:</td>
-                  <td className="py-2 pr-2 text-foreground font-bold" colSpan={2}>
-                    {formatServerTimeToMalaysia12Hour(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td className="py-2 pr-4 text-muted-foreground/80 font-sans font-semibold align-top pt-2.5">Last Address:</td>
-                  <td className="py-2 pr-2 text-foreground font-bold leading-relaxed pt-2.5" colSpan={2}>
-                    {latestLog.address || 'N/A'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono">
+            <div>
+              <span className="text-muted-foreground/80">Latest Coordinates:</span>{' '}
+              <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 font-bold text-amber-600">
+                  <FontAwesomeIcon icon={faMountain} className="h-3 w-3" />
+                  {latestElevation}
+                </span>
+                <span className="text-muted-foreground">/</span>
+                <span className={`inline-flex items-center gap-1 font-bold ${tempAnimClass}`}>
+                  <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-3 w-3" />
+                  {latestTemp}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono border-t border-border/60 pt-2 items-start">
+            <div>
+              <span className="text-muted-foreground/80">Last Updated:</span>{' '}
+              <span className="font-bold text-foreground">
+                {formatServerTimeToMalaysia12Hour(latestLog)} <span className="text-muted-foreground font-normal">({getServerTimeAgo(latestLog.timestamp_my)})</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground/80">Last Address:</span>{' '}
+              <span className="font-bold text-foreground leading-relaxed block sm:inline">{latestLog.address || 'N/A'}</span>
+            </div>
           </div>
         </div>
       )}
