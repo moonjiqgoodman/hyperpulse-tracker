@@ -88,7 +88,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   /**
-   * Robust Date Normalization forcing Malaysia Time (+08:00) for SQL datetime strings or handling Unix Epoch
+   * Correct Date Normalization for DB strings already stored in MYT (or Unix epoch numbers)
    */
   const getNormalizedDate = (dateInput: any) => {
     if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
@@ -100,7 +100,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       }
 
       const dateStr = String(dateInput).trim();
-      // If it's a MySQL datetime string like "2026-11-18 19:21:09", explicitly append +08:00
+      // If it's a MySQL datetime string like "2026-11-18 19:21:09", treat it as local/MYT time directly
       if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateStr)) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -118,7 +118,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const getServerTimeAgo = (timestampMy: string) => {
     if (!timestampMy) return 'Unknown';
     try {
-      const past = getNormalizedDate(timestampMy).getTime();
+      const dbDate = String(timestampMy).trim().replace(' ', 'T');
+      // Parse as MYT directly to get exact time ago
+      const past = new Date(dbDate.endsWith('Z') || dbDate.includes('+') ? dbDate : dbDate + '+08:00').getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
       
@@ -416,7 +418,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     });
   }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex]);
 
-  // Handle Playback Animation Effect (7 seconds duration per waypoint step)
   useEffect(() => {
     if (!isPlaying || terminalLogs.length === 0) {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
