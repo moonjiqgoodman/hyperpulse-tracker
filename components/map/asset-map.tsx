@@ -76,32 +76,22 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   const getNormalizedDate = (dateInput: any) => {
-    if (!dateInput) return new Date(0);
+    if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
     try {
-      // Handle Unix epoch timestamps (seconds or milliseconds)
-      if (!isNaN(dateInput) && Number(dateInput) > 0) {
-        const num = Number(dateInput);
+      const num = Number(dateInput);
+      if (!isNaN(num) && num > 0) {
         const ms = String(num).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
 
       const dateStr = String(dateInput);
-      // If already formatted ISO or UTC string
       if (dateStr.endsWith('Z') || dateStr.includes('+')) {
         return new Date(dateStr);
       }
 
-      // If string timestamp without timezone, treat as UTC epoch representation or ISO UTC
-      if (!dateStr.includes('T') && !dateStr.includes('-')) {
-        const num = Number(dateStr);
-        if (!isNaN(num) && num > 0) {
-          const ms = String(num).length === 10 ? num * 1000 : num;
-          return new Date(ms);
-        }
-      }
-
       const normalizedString = dateStr.replace(' ', 'T') + (dateStr.endsWith('Z') ? '' : 'Z');
-      return new Date(normalizedString);
+      const parsed = new Date(normalizedString);
+      return isNaN(parsed.getTime()) ? new Date(0) : parsed;
     } catch (e) {
       return new Date(0);
     }
@@ -129,15 +119,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   const formatGpsTimeToMalaysia12Hour = (log: any) => {
     const rawTime = log.recorded_at;
-    if (!rawTime) return 'N/A';
+    if (rawTime === null || rawTime === undefined) return 'N/A';
     try {
-      const num = Number(rawTime);
-      const ms = !isNaN(num) && num > 0 
-        ? (String(num).length === 10 ? num * 1000 : num) 
-        : getNormalizedDate(rawTime).getTime();
-
-      if (isNaN(ms) || ms === 0) return String(rawTime);
-      const date = new Date(ms);
+      const date = getNormalizedDate(rawTime);
+      if (isNaN(date.getTime()) || date.getTime() === 0) return String(rawTime);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -159,7 +144,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     if (!targetTime) return 'N/A';
     try {
       const date = getNormalizedDate(targetTime);
-      if (isNaN(date.getTime())) return targetTime;
+      if (isNaN(date.getTime()) || date.getTime() === 0) return targetTime;
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -263,7 +248,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         parseFloat(log.longitude),
       ]);
 
-      // Base background dashed polyline (dimmed route)
       const dashedPolyline = L.polyline(latLngs, {
         color: '#94a3b8',
         weight: 3,
@@ -274,7 +258,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       layerGroup.addLayer(dashedPolyline);
       polylineRef.current = dashedPolyline;
 
-      // Active progress dashed polyline following along the route up to currentPlaybackIndex
       const activeProgressIndices = currentPlaybackIndex !== null ? Math.max(1, currentPlaybackIndex + 1) : terminalLogs.length;
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
@@ -342,8 +325,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <td style="padding: 2px 0; font-weight: bold; line-height: 1.3;">${log.address || 'N/A'}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold; vertical-align: middle;">Last Seen:</td>
-                <td style="padding: 6px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #2563eb; font-family: monospace; font-size: 11px; vertical-align: middle;">
+                <td style="padding: 6px 0 2px 0; color: #6b7280; border-top: 1px solid #e5e7eb; font-weight: bold; vertical-align: middle;">GPS Time:</td>
+                <td style="padding: 6px 0 2px 0; border-top: 1px solid #e5e7eb; font-weight: bold; color: #16a34a; font-family: monospace; font-size: 11px; vertical-align: middle;">
                   <span id="seen-text-${waypointNumber}">${copyTextVal}</span>
                   <button id="copy-btn-${waypointNumber}" style="margin-left: 6px; padding: 2px 6px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: inherit; color: #000000;">
                     ${isCopied ? 'Copied' : 'Copy'}
@@ -438,7 +421,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open for 7s)
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open)
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -450,7 +433,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
     const map = mapRef.current;
     if (map) {
-      // Pan and shift down so marker is precisely in the middle of the map viewport
       const targetPoint = map.project([lat, lng], 20).subtract([0, 100]);
       const targetLatLng = map.unproject(targetPoint, 20);
       map.setView(targetLatLng, 20, { animate: true });
@@ -551,8 +533,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const rawTransmit = log.recorded_at;
         const rawReceive = log.timestamp_my;
         if (rawTransmit && rawReceive) {
-          const num = Number(rawTransmit);
-          const transmitMs = !isNaN(num) && num > 0 ? (String(num).length === 10 ? num * 1000 : num) : getNormalizedDate(rawTransmit).getTime();
+          const transmitMs = getNormalizedDate(rawTransmit).getTime();
           const receiveMs = getNormalizedDate(rawReceive).getTime();
 
           if (!isNaN(transmitMs) && !isNaN(receiveMs) && transmitMs > 0 && receiveMs > 0) {
@@ -680,6 +661,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             const waypointNum = idx + 1;
             const isHighlighted = currentPlaybackIndex === idx;
 
+            // TRANSMIT / SERVER TIME for card badges ("Xh ago" with full MYT datetime on hover)
+            const transmitTimeAgo = getServerTimeAgo(log.timestamp_my);
+            const fullTransmitMyt = formatServerTimeToMalaysia12Hour(log);
+
+            // GPS TIME for map popup
+            const gpsTimeMyt = formatGpsTimeToMalaysia12Hour(log);
+
             return (
               <React.Fragment key={idx}>
                 {idx > 0 && (
@@ -706,8 +694,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                     <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
                       {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {getServerTimeAgo(log.timestamp_my)}
+                    {/* Badge timestamp shows transmission time ("Xh ago") with full MYT datetime on hover */}
+                    <div 
+                      className="text-[10px] text-muted-foreground underline decoration-dotted underline-offset-2 cursor-help"
+                      title={`Transmitted at: ${fullTransmitMyt}\nGPS Tagged at: ${gpsTimeMyt}`}
+                    >
+                      {transmitTimeAgo}
                     </div>
                   </div>
                 </button>
