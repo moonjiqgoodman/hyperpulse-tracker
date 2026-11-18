@@ -1,3 +1,4 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -20,7 +21,6 @@ const WAYPOINT_COLORS = [
   '#f97316', 
 ];
 
-// Message Reason Mapping based on device specification
 const MESSAGE_REASONS: Record<number, string> = {
   0: 'First message sent after boot (~60s after startup)',
   1: 'Stationary interval elapsed',
@@ -88,15 +88,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   /**
-   * Exact Sidebar Date Normalization Formula
+   * Exact Sidebar Date Normalization Formula with proper Unix Epoch UTC handling
    */
   const getNormalizedDate = (dateInput: any) => {
     if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
     try {
-      // If it's a Unix epoch timestamp (number or string containing digits)
       const num = Number(dateInput);
       if (!isNaN(num) && num > 0) {
-        // 10 digits = Unix seconds (GPS time 'time'), 13 digits = milliseconds (server timestamp)
+        // 10 digits = Unix epoch seconds (GPS time 'time'), 13 digits = milliseconds (server timestamp)
         const ms = String(Math.floor(num)).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
@@ -440,14 +439,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 7000); // exactly 7 seconds per step
+    }, 7000); // 7 seconds per step
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open for 7s)
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -680,6 +679,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
         </div>
         
+        {/* Top Waypoint Navigation Bar (No time displayed directly, only Step and hover tooltip) */}
         <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
@@ -687,11 +687,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             const waypointNum = idx + 1;
             const isHighlighted = currentPlaybackIndex === idx;
 
-            // TRANSMIT / SERVER TIME for card badges ("Xh ago" with full MYT datetime on hover)
             const transmitTimeAgo = getServerTimeAgo(log.timestamp_my);
             const fullTransmitMyt = formatServerTimeToMalaysia12Hour(log);
-
-            // GPS TAGGED TIME in MYT (GMT+8)
             const gpsTimeMyt = formatGpsTimeToMalaysia12Hour(log);
 
             return (
@@ -708,7 +705,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                       ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
                       : 'bg-background hover:bg-muted/80 border-border'
                   }`}
-                  title={`Focus on Waypoint #${waypointNum}`}
+                  title={`Focus on Waypoint #${waypointNum}\nGPS Time: ${gpsTimeMyt}\nTransmitted: ${fullTransmitMyt}`}
                 >
                   <span 
                     className="h-6 w-6 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
@@ -717,15 +714,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                     {waypointNum}
                   </span>
                   <div className="text-left font-mono">
-                    <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                      <span>{isLast ? 'Latest' : `Step ${waypointNum}`}</span>
-                      <span className="text-[10px] text-emerald-500 font-normal">({gpsTimeMyt.replace(' (GMT+8)', '')})</span>
+                    <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                      {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
-                    {/* Badge timestamp shows transmission time ("Xh ago") with full MYT datetime on hover */}
-                    <div 
-                      className="text-[10px] text-muted-foreground underline decoration-dotted underline-offset-2 cursor-help"
-                      title={`Transmitted at: ${fullTransmitMyt}\nGPS Tagged at: ${gpsTimeMyt}`}
-                    >
+                    <div className="text-[10px] text-muted-foreground">
                       {transmitTimeAgo}
                     </div>
                   </div>
