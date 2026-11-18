@@ -1,4 +1,3 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -88,27 +87,24 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   /**
-   * Exact Sidebar Date Normalization Formula with proper Unix Epoch UTC handling
+   * Correctly parses Unix Epoch timestamps (seconds or milliseconds) and ensures UTC interpretation.
    */
   const getNormalizedDate = (dateInput: any) => {
     if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
     try {
       const num = Number(dateInput);
       if (!isNaN(num) && num > 0) {
-        // 10 digits = Unix epoch seconds (GPS time 'time'), 13 digits = milliseconds (server timestamp)
+        // 10 digits = Unix epoch seconds (GPS time 'time'), 13 digits = milliseconds
         const ms = String(Math.floor(num)).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
 
       const dateStr = String(dateInput);
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
-        return new Date(dateStr.replace(' ', 'T') + '+08:00');
+        return new Date(dateStr.replace(' ', 'T') + 'Z');
       }
 
-      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
-        ? dateStr 
-        : dateStr.replace(' ', 'T') + 'Z';
-      return new Date(normalizedString);
+      return new Date(dateStr);
     } catch (e) {
       return new Date(0);
     }
@@ -135,7 +131,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   /**
-   * Formats GPS time (recorded_at / payload 'time') in Malaysia 12-hour format (GMT+8)
+   * Formats GPS time (recorded_at / payload 'time') strictly in Malaysia Time (Asia/Kuala_Lumpur, GMT+8)
    */
   const formatGpsTimeToMalaysia12Hour = (log: any) => {
     const rawTime = log.recorded_at !== undefined && log.recorded_at !== null ? log.recorded_at : log.time;
