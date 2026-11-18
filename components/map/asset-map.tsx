@@ -1,3 +1,4 @@
+// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -87,24 +88,28 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   /**
-   * Correctly parses Unix Epoch timestamps (seconds or milliseconds) and ensures UTC interpretation.
+   * Robust Date Normalization forcing Malaysia Time (+08:00) for SQL datetime strings or handling Unix Epoch
    */
   const getNormalizedDate = (dateInput: any) => {
     if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
     try {
       const num = Number(dateInput);
       if (!isNaN(num) && num > 0) {
-        // 10 digits = Unix epoch seconds (GPS time 'time'), 13 digits = milliseconds
         const ms = String(Math.floor(num)).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
 
-      const dateStr = String(dateInput);
-      if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
-        return new Date(dateStr.replace(' ', 'T') + 'Z');
+      const dateStr = String(dateInput).trim();
+      // If it's a MySQL datetime string like "2026-11-18 19:21:09", explicitly append +08:00
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateStr)) {
+        return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
 
-      return new Date(dateStr);
+      if (dateStr.endsWith('Z') || dateStr.includes('+')) {
+        return new Date(dateStr);
+      }
+
+      return new Date(dateStr.replace(' ', 'T') + '+08:00');
     } catch (e) {
       return new Date(0);
     }
@@ -130,9 +135,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  /**
-   * Formats GPS time (recorded_at / payload 'time') strictly in Malaysia Time (Asia/Kuala_Lumpur, GMT+8)
-   */
   const formatGpsTimeToMalaysia12Hour = (log: any) => {
     const rawTime = log.recorded_at !== undefined && log.recorded_at !== null ? log.recorded_at : log.time;
     if (rawTime === null || rawTime === undefined) return 'N/A';
@@ -435,14 +437,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 7000); // 7 seconds per step
+    }, 7000);
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -675,7 +676,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
         </div>
         
-        {/* Top Waypoint Navigation Bar (No time displayed directly, only Step and hover tooltip) */}
         <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
