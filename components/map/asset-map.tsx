@@ -38,6 +38,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [isDeleting, setIsDeleting] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Playback Animation States
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlaybackIndex, setCurrentPlaybackIndex] = useState<number | null>(null);
   const playbackTimerRef = useRef<any>(null);
@@ -77,6 +78,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const getNormalizedDate = (dateInput: any) => {
     if (!dateInput) return new Date(0);
     try {
+      // Handle Unix epoch timestamps (seconds or milliseconds)
       if (!isNaN(dateInput) && Number(dateInput) > 0) {
         const num = Number(dateInput);
         const ms = String(num).length === 10 ? num * 1000 : num;
@@ -84,13 +86,21 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       }
 
       const dateStr = String(dateInput);
-      if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
-        return new Date(dateStr.replace(' ', 'T') + '+08:00');
+      // If already formatted ISO or UTC string
+      if (dateStr.endsWith('Z') || dateStr.includes('+')) {
+        return new Date(dateStr);
       }
-      
-      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
-        ? dateStr 
-        : dateStr.replace(' ', 'T') + 'Z';
+
+      // If string timestamp without timezone, treat as UTC epoch representation or ISO UTC
+      if (!dateStr.includes('T') && !dateStr.includes('-')) {
+        const num = Number(dateStr);
+        if (!isNaN(num) && num > 0) {
+          const ms = String(num).length === 10 ? num * 1000 : num;
+          return new Date(ms);
+        }
+      }
+
+      const normalizedString = dateStr.replace(' ', 'T') + (dateStr.endsWith('Z') ? '' : 'Z');
       return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
@@ -253,6 +263,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         parseFloat(log.longitude),
       ]);
 
+      // Base background dashed polyline (dimmed route)
       const dashedPolyline = L.polyline(latLngs, {
         color: '#94a3b8',
         weight: 3,
@@ -263,6 +274,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       layerGroup.addLayer(dashedPolyline);
       polylineRef.current = dashedPolyline;
 
+      // Active progress dashed polyline following along the route up to currentPlaybackIndex
       const activeProgressIndices = currentPlaybackIndex !== null ? Math.max(1, currentPlaybackIndex + 1) : terminalLogs.length;
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
@@ -379,7 +391,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const marker = L.marker([lat, lng], { icon: customIcon }).bindPopup(popupContent);
 
         marker.on('click', () => {
-          // Calculate precise vertical offset so marker sits dead center of the map view accounting for popup card height (~120px offset)
           const mapInstance = mapRef.current;
           if (mapInstance) {
             const targetPoint = mapInstance.project([lat, lng], 20).subtract([0, 100]);
@@ -420,7 +431,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 7000); // exactly 7 seconds per step
+    }, 7000); // 7 seconds per step
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
@@ -439,7 +450,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
     const map = mapRef.current;
     if (map) {
-      // Pan and shift down so marker is precisely in the absolute center of the map viewport
+      // Pan and shift down so marker is precisely in the middle of the map viewport
       const targetPoint = map.project([lat, lng], 20).subtract([0, 100]);
       const targetLatLng = map.unproject(targetPoint, 20);
       map.setView(targetLatLng, 20, { animate: true });
