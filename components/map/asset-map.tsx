@@ -20,6 +20,18 @@ const WAYPOINT_COLORS = [
   '#f97316', 
 ];
 
+// Message Reason Mapping based on device specification
+const MESSAGE_REASONS: Record<number, string> = {
+  0: 'First message sent after boot (~60s after startup)',
+  1: 'Stationary interval elapsed',
+  2: 'Movement started (transitioned from stationary)',
+  3: 'Movement stopped (was in motion, now stopped)',
+  4: 'Movement interval elapsed (remains in motion)',
+  5: 'Reserved for future use',
+  6: 'Device tampered with',
+  7: 'Alert interval elapsed (ongoing alert state)',
+};
+
 export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [], onDataReset }: AssetMapProps) {
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -75,23 +87,29 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return found ? found.device_name : terminalId;
   };
 
+  /**
+   * Exact Sidebar Date Normalization Formula
+   */
   const getNormalizedDate = (dateInput: any) => {
     if (dateInput === null || dateInput === undefined || dateInput === '') return new Date(0);
     try {
+      // If it's a Unix epoch timestamp (number or string containing digits)
       const num = Number(dateInput);
       if (!isNaN(num) && num > 0) {
-        const ms = String(num).length === 10 ? num * 1000 : num;
+        // 10 digits = Unix seconds (GPS time 'time'), 13 digits = milliseconds (server timestamp)
+        const ms = String(Math.floor(num)).length === 10 ? num * 1000 : num;
         return new Date(ms);
       }
 
       const dateStr = String(dateInput);
-      if (dateStr.endsWith('Z') || dateStr.includes('+')) {
-        return new Date(dateStr);
+      if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
+        return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
 
-      const normalizedString = dateStr.replace(' ', 'T') + (dateStr.endsWith('Z') ? '' : 'Z');
-      const parsed = new Date(normalizedString);
-      return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
+        ? dateStr 
+        : dateStr.replace(' ', 'T') + 'Z';
+      return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
     }
@@ -117,8 +135,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
+  /**
+   * Formats GPS time (recorded_at / payload 'time') in Malaysia 12-hour format (GMT+8)
+   */
   const formatGpsTimeToMalaysia12Hour = (log: any) => {
-    const rawTime = log.recorded_at;
+    const rawTime = log.recorded_at !== undefined && log.recorded_at !== null ? log.recorded_at : log.time;
     if (rawTime === null || rawTime === undefined) return 'N/A';
     try {
       const date = getNormalizedDate(rawTime);
@@ -229,7 +250,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   
   const terminalLogs = devices
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at).getTime());
+    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at || a.time).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at || b.time).getTime());
 
   useEffect(() => {
     if (!isClient) return;
@@ -284,6 +305,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const batteryInfo = getBatteryStats(log.battery_voltage);
         const elevationStr = log.elevation !== null && log.elevation !== undefined ? `${log.elevation} m` : 'N/A';
         const tempStr = log.temperature !== null && log.temperature !== undefined ? `${log.temperature} °C` : 'N/A';
+        const reasonDesc = log.reason !== undefined && MESSAGE_REASONS[Number(log.reason)] ? `(${MESSAGE_REASONS[Number(log.reason)]})` : '';
         const latLngStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
         const copyTextVal = `${latLngStr}, ${gpsTime}`;
         const copyKeyId = `waypoint-${waypointNumber}`;
@@ -319,6 +341,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <tr>
                 <td style="padding: 2px 0; color: #6b7280;">Temp:</td>
                 <td style="padding: 2px 0; font-weight: 600;">${tempStr}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Reason:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${log.reason !== undefined ? `${log.reason} ${reasonDesc}` : 'N/A'}</td>
               </tr>
               <tr>
                 <td style="padding: 2px 0; color: #6b7280; vertical-align: top; font-weight: bold;">Address:</td>
@@ -414,14 +440,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
         return prevIndex + 1;
       });
-    }, 7000); // 7 seconds per step
+    }, 7000); // exactly 7 seconds per step
 
     return () => {
       if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
     };
   }, [isPlaying, terminalLogs.length]);
 
-  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open)
+  // Trigger map pan & popup when currentPlaybackIndex changes during playback (centered precisely with popup open for 7s)
   useEffect(() => {
     if (currentPlaybackIndex === null || terminalLogs.length === 0) return;
     const log = terminalLogs[currentPlaybackIndex];
@@ -530,7 +556,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       let gapHours = 'N/A';
       try {
-        const rawTransmit = log.recorded_at;
+        const rawTransmit = log.recorded_at !== undefined && log.recorded_at !== null ? log.recorded_at : log.time;
         const rawReceive = log.timestamp_my;
         if (rawTransmit && rawReceive) {
           const transmitMs = getNormalizedDate(rawTransmit).getTime();
@@ -665,7 +691,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             const transmitTimeAgo = getServerTimeAgo(log.timestamp_my);
             const fullTransmitMyt = formatServerTimeToMalaysia12Hour(log);
 
-            // GPS TIME for map popup
+            // GPS TAGGED TIME in MYT (GMT+8)
             const gpsTimeMyt = formatGpsTimeToMalaysia12Hour(log);
 
             return (
@@ -691,8 +717,9 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                     {waypointNum}
                   </span>
                   <div className="text-left font-mono">
-                    <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                      {isLast ? 'Latest' : `Step ${waypointNum}`}
+                    <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                      <span>{isLast ? 'Latest' : `Step ${waypointNum}`}</span>
+                      <span className="text-[10px] text-emerald-500 font-normal">({gpsTimeMyt.replace(' (GMT+8)', '')})</span>
                     </div>
                     {/* Badge timestamp shows transmission time ("Xh ago") with full MYT datetime on hover */}
                     <div 
