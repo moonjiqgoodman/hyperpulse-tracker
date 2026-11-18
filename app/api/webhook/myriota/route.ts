@@ -40,19 +40,15 @@ export async function POST(request: Request) {
 
     let parsedData = payload;
 
-    // If Myriota sent 'Data' as a stringified JSON, parse it first
     if (parsedData.Data && typeof parsedData.Data === 'string') {
       try {
         parsedData = JSON.parse(parsedData.Data);
       } catch (e) {
-        // Keep as is if it fails
       }
     }
 
-    // Extract packet structure from Packets array if present
     const packet = parsedData.Packets?.[0] || parsedData;
 
-    // Resolve TerminalId from any level of the payload
     let terminalId = 
       packet.TerminalId || 
       packet.terminal_id || 
@@ -61,7 +57,6 @@ export async function POST(request: Request) {
       payload.TerminalId || 
       'UNKNOWN_ASSET';
 
-    // Extract the inner message value/data
     let innerVal = packet.Value || packet.Data || packet.message || packet;
     if (typeof innerVal === 'string') {
       try { innerVal = JSON.parse(innerVal); } catch (e) {}
@@ -77,24 +72,39 @@ export async function POST(request: Request) {
 
     const currentAddress = await getAddressFromCoords(lat, lng);
     
-    const rawTime = packet.Timestamp || dataObj?.time;
-    const epochMs = rawTime ? rawTime * (String(rawTime).length === 10 ? 1000 : 1) : Date.now();
+    const gpsTimeSec = dataObj?.time; 
+    const serverTimestampMs = packet.Timestamp || Date.now(); 
 
-    // Standard UTC Timestamp string
-    const timestampUtc = new Date(epochMs).toISOString().slice(0, 19).replace('T', ' ');
+    const gpsEpochMs = gpsTimeSec ? gpsTimeSec * 1000 : serverTimestampMs;
+    const serverEpochMs = serverTimestampMs;
 
-    // Malaysia Time (UTC+8) Calculation (+8 hours in milliseconds)
-    const mytDate = new Date(epochMs + (8 * 60 * 60 * 1000));
-    const timestampMy = mytDate.toISOString().slice(0, 19).replace('T', ' ');
+    const formatToMytSqlString = (ms: number) => {
+      const date = new Date(ms);
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kuala_Lumpur',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      })
+        .format(date)
+        .replace(/(\d{2})\/(\d{2})\/(\d{4}), (\d{2}):(\d{2}):(\d{2})/, '$3-$2-$1 $4:$5:$6');
+    };
+
+    const recordedAtMyt = formatToMytSqlString(gpsEpochMs);
+    const timestampMy = formatToMytSqlString(serverEpochMs);
 
     const query = `
       INSERT INTO telemetry_logs (terminal_id, latitude, longitude, elevation, temperature, address, battery_voltage, recorded_at, timestamp_my) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    await pool.execute(query, [terminalId, lat, lng, elevation, temperature, currentAddress, batteryVoltage, timestampUtc, timestampMy]);
+    await pool.execute(query, [terminalId, lat, lng, elevation, temperature, currentAddress, batteryVoltage, recordedAtMyt, timestampMy]);
 
-    console.log(`DB to ${terminalId} -> Lat: ${lat}, Lng: ${lng}, Elev: ${elevation}m, Temp: ${temperature}°C, Battery: ${batteryVoltage}V, MYT: ${timestampMy}`);
-    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, elevation, temperature, batteryVoltage, timestampMy }, { status: 200 });
+    console.log(`DB saved for ${terminalId} -> Lat: ${lat}, Lng: ${lng}, GPS Time (MYT): ${recordedAtMyt}, Server Time (MYT): ${timestampMy}`);
+    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, elevation, temperature, batteryVoltage, recordedAt: recordedAtMyt, timestampMy }, { status: 200 });
 
   } catch (error) {
     console.error('Database save error:', error);
