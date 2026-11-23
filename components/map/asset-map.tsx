@@ -1,10 +1,27 @@
-// components/map/asset-map.tsx
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBatteryFull, faBatteryThreeQuarters, faBatteryHalf, faBatteryEmpty, faFileExcel, faTrashCan, faTriangleExclamation, faCrosshairs, faMountain, faTemperatureHigh, faTemperatureLow, faPlay, faPause, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import {
+  faBatteryFull,
+  faBatteryThreeQuarters,
+  faBatteryHalf,
+  faBatteryEmpty,
+  faFileExcel,
+  faTrashCan,
+  faTriangleExclamation,
+  faCrosshairs,
+  faMountain,
+  faTemperatureHigh,
+  faTemperatureLow,
+  faPlay,
+  faPause,
+  faRotateRight,
+  faExpand,
+  faCompress,
+  faCamera,
+} from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
   devices?: any[];
@@ -16,9 +33,9 @@ interface AssetMapProps {
 const WAYPOINT_COLORS = [
   '#3b82f6',
   '#6366f1',
-  '#8b5cf6', 
-  '#ec4899', 
-  '#f97316', 
+  '#8b5cf6',
+  '#ec4899',
+  '#f97316',
 ];
 
 const MESSAGE_REASONS: Record<number, string> = {
@@ -35,6 +52,7 @@ const MESSAGE_REASONS: Record<number, string> = {
 export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [], onDataReset }: AssetMapProps) {
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const layerGroupRef = useRef<any | null>(null);
   const markersRef = useRef<{ [key: number]: any }>({});
   const polylineRef = useRef<any | null>(null);
@@ -44,6 +62,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   const [, setTick] = useState(0);
   const [isClient, setIsClient] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
@@ -63,6 +83,19 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const fsElement = document.fullscreenElement;
+      setIsFullscreen(fsElement === mapWrapperRef.current);
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 150);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   if (prevSelectedDeviceRef.current !== selectedDevice) {
@@ -100,7 +133,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       }
 
       const dateStr = String(dateInput).trim();
-      // If it's a MySQL datetime string like "2026-11-18 19:21:09", treat it as local/MYT time directly
       if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateStr)) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
@@ -115,15 +147,23 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
+  const getGpsSortTime = (log: any) => {
+    const rawGps = log?.recorded_at !== undefined && log?.recorded_at !== null && log?.recorded_at !== ''
+      ? log.recorded_at
+      : log?.time;
+    const gpsMs = getNormalizedDate(rawGps).getTime();
+    if (!isNaN(gpsMs) && gpsMs > 0) return gpsMs;
+    return getNormalizedDate(log?.timestamp_my).getTime();
+  };
+
   const getServerTimeAgo = (timestampMy: string) => {
     if (!timestampMy) return 'Unknown';
     try {
       const dbDate = String(timestampMy).trim().replace(' ', 'T');
-      // Parse as MYT directly to get exact time ago
       const past = new Date(dbDate.endsWith('Z') || dbDate.includes('+') ? dbDate : dbDate + '+08:00').getTime();
       const now = new Date().getTime();
       const diffMs = now - past;
-      
+
       const diffMins = Math.floor(diffMs / (1000 * 60));
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -187,8 +227,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       return { percent: 0, text: 'N/A', color: 'text-muted-foreground', icon: faBatteryEmpty };
     }
 
-    const minV = 2.0; 
-    const maxV = 3.4; 
+    const minV = 2.0;
+    const maxV = 3.4;
     const rawPct = ((voltage - minV) / (maxV - minV)) * 100;
     const percent = Math.max(0, Math.min(100, Math.round(rawPct)));
 
@@ -225,6 +265,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 22,
         maxNativeZoom: 19,
+        crossOrigin: true,
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
 
@@ -246,10 +287,11 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   }, [isClient]);
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
-  
+
+  // Route ordered strictly by GPS time ascending so the latest GPS time is last
   const terminalLogs = devices
     .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getNormalizedDate(a.timestamp_my || a.recorded_at || a.time).getTime() - getNormalizedDate(b.timestamp_my || b.recorded_at || b.time).getTime());
+    .sort((a: any, b: any) => getGpsSortTime(a) - getGpsSortTime(b));
 
   useEffect(() => {
     if (!isClient) return;
@@ -296,7 +338,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const lng = parseFloat(log.longitude);
         const isLatest = index === terminalLogs.length - 1;
         const waypointNumber = index + 1;
-        
+
         const markerColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[index % WAYPOINT_COLORS.length];
         const deviceName = getDeviceName(log.terminal_id);
 
@@ -488,6 +530,124 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
+  const handleToggleFullscreen = async () => {
+    const wrapper = mapWrapperRef.current;
+    if (!wrapper) return;
+
+    try {
+      if (!document.fullscreenElement && !isFullscreen) {
+        if (wrapper.requestFullscreen) {
+          await wrapper.requestFullscreen();
+        } else {
+          setIsFullscreen(true);
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
+        setIsFullscreen(false);
+      }
+    } catch {
+      setIsFullscreen((prev) => !prev);
+    }
+
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 150);
+  };
+
+  const handleExportMapImage = async () => {
+    const map = mapRef.current;
+    const container = mapContainerRef.current;
+    if (!map || !container || isExportingImage) return;
+
+    setIsExportingImage(true);
+    try {
+      const rect = container.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(0, 0, width, height);
+
+      const containerRect = container.getBoundingClientRect();
+      const tileImgs = Array.from(container.querySelectorAll('.leaflet-tile-pane img')) as HTMLImageElement[];
+
+      for (const img of tileImgs) {
+        if (!img.complete || img.naturalWidth === 0) continue;
+        const imgRect = img.getBoundingClientRect();
+        const x = imgRect.left - containerRect.left;
+        const y = imgRect.top - containerRect.top;
+        const w = imgRect.width;
+        const h = imgRect.height;
+
+        try {
+          ctx.drawImage(img, x, y, w, h);
+        } catch {
+          // Skip tainted tile if CORS blocks canvas read
+        }
+      }
+
+      // Draw route polyline based on GPS-ordered terminalLogs
+      if (terminalLogs.length > 0) {
+        const points = terminalLogs.map((log: any) => {
+          const pt = map.latLngToContainerPoint([parseFloat(log.latitude), parseFloat(log.longitude)]);
+          return { x: pt.x, y: pt.y, log };
+        });
+
+        ctx.save();
+        ctx.beginPath();
+        points.forEach((p, idx) => {
+          if (idx === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([6, 8]);
+        ctx.stroke();
+        ctx.restore();
+
+        points.forEach((p, idx) => {
+          const isLatest = idx === points.length - 1;
+          const badgeColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);
+          ctx.fillStyle = badgeColor;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(idx + 1), p.x, p.y);
+        });
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${activeDeviceName.replace(/[^a-zA-Z0-9]/g, '_')}_map_route.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Export map image error:', err);
+      alert('Unable to export map image in this browser/tile configuration.');
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
@@ -527,20 +687,20 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     if (!terminalLogs || terminalLogs.length === 0) return;
 
     const headers = [
-      'Waypoint #', 
-      'Device Name', 
-      'Terminal ID', 
-      'Latitude', 
-      'Longitude', 
-      'Elevation (m)', 
-      'Temperature (°C)', 
-      'Battery (%)', 
-      'GPS Time (Transmit)', 
-      'Received Time (Server)', 
-      'Gap (Hours)', 
+      'Waypoint #',
+      'Device Name',
+      'Terminal ID',
+      'Latitude',
+      'Longitude',
+      'Elevation (m)',
+      'Temperature (°C)',
+      'Battery (%)',
+      'GPS Time (Transmit)',
+      'Received Time (Server)',
+      'Gap (Hours)',
       'Address'
     ];
-    
+
     const rows = terminalLogs.map((log: any, idx: number) => {
       const devName = getDeviceName(log.terminal_id);
       const lat = log.latitude;
@@ -571,17 +731,17 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const addr = `"${(log.address || '').replace(/"/g, '""')}"`;
 
       return [
-        idx + 1, 
-        `"${devName}"`, 
-        `"${log.terminal_id}"`, 
-        lat, 
-        lng, 
-        elevation, 
-        temperature, 
-        batt, 
-        `"${gpsTime}"`, 
-        `"${receivedTime}"`, 
-        gapHours, 
+        idx + 1,
+        `"${devName}"`,
+        `"${log.terminal_id}"`,
+        lat,
+        lng,
+        elevation,
+        temperature,
+        batt,
+        `"${gpsTime}"`,
+        `"${receivedTime}"`,
+        gapHours,
         addr
       ].join(',');
     });
@@ -589,7 +749,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     const csvContent = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement('a');
     link.setAttribute('href', url);
     link.setAttribute('download', `${activeDeviceName.replace(/[^a-zA-Z0-9]/g, '_')}_telemetry_history.csv`);
@@ -676,7 +836,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             )}
           </div>
         </div>
-        
+
         <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
@@ -698,13 +858,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <button
                   onClick={() => handleZoomToWaypoint(waypointNum, parseFloat(log.latitude), parseFloat(log.longitude))}
                   className={`group flex items-center gap-2.5 border px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs shrink-0 ${
-                    isHighlighted 
-                      ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
+                    isHighlighted
+                      ? 'bg-primary/10 border-primary ring-2 ring-primary/30'
                       : 'bg-background hover:bg-muted/80 border-border'
                   }`}
                   title={`Focus on Waypoint #${waypointNum}\nGPS Time: ${gpsTimeMyt}\nTransmitted: ${fullTransmitMyt}`}
                 >
-                  <span 
+                  <span
                     className="h-6 w-6 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
                     style={{ backgroundColor: color }}
                   >
@@ -725,13 +885,39 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         </div>
       </div>
 
-      <div className="relative w-full rounded-xl overflow-hidden shadow-sm border border-border">
-        <div 
-          ref={mapContainerRef} 
-          className="w-full z-0" 
-          style={{ height: '450px', minHeight: '400px' }} 
+      <div
+        ref={mapWrapperRef}
+        className={`relative w-full rounded-xl overflow-hidden shadow-sm border border-border bg-background ${
+          isFullscreen ? 'fixed inset-0 z-[9999] rounded-none border-0 h-screen w-screen' : ''
+        }`}
+      >
+        <div
+          ref={mapContainerRef}
+          className="w-full z-0"
+          style={{ height: isFullscreen ? '100vh' : '450px', minHeight: '400px' }}
         />
-        
+
+        <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+          <button
+            onClick={handleExportMapImage}
+            disabled={isExportingImage}
+            className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer disabled:opacity-60"
+            title="Export map view as PNG image"
+          >
+            <FontAwesomeIcon icon={faCamera} className="h-3.5 w-3.5 text-emerald-400" />
+            <span>{isExportingImage ? 'Exporting...' : 'Export Image'}</span>
+          </button>
+
+          <button
+            onClick={handleToggleFullscreen}
+            className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Map'}
+          >
+            <FontAwesomeIcon icon={isFullscreen ? faCompress : faExpand} className="h-3.5 w-3.5 text-blue-400" />
+            <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+          </button>
+        </div>
+
         <button
           onClick={handleResetMapView}
           className="absolute bottom-4 right-4 z-[400] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
