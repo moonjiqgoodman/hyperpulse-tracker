@@ -594,7 +594,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         }
       }
 
-      // Draw route polyline based on GPS-ordered terminalLogs
       if (terminalLogs.length > 0) {
         const points = terminalLogs.map((log: any) => {
           const pt = map.latLngToContainerPoint([parseFloat(log.latitude), parseFloat(log.longitude)]);
@@ -888,7 +887,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       <div
         ref={mapWrapperRef}
         className={`relative w-full rounded-xl overflow-hidden shadow-sm border border-border bg-background ${
-          isFullscreen ? 'fixed inset-0 z-[9999] rounded-none border-0 h-screen w-screen' : ''
+          isFullscreen ? 'fixed inset-0 z-[9999] rounded-none border-0 h-screen w-screen' : 'z-0'
         }`}
       >
         <div
@@ -897,7 +896,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           style={{ height: isFullscreen ? '100vh' : '450px', minHeight: '400px' }}
         />
 
-        <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+        <div className="absolute top-3 right-3 z-[20] flex items-center gap-2">
           <button
             onClick={handleExportMapImage}
             disabled={isExportingImage}
@@ -920,7 +919,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
         <button
           onClick={handleResetMapView}
-          className="absolute bottom-4 right-4 z-[400] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
+          className="absolute bottom-4 right-4 z-[20] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
           title="Reset map view to fit all waypoints"
         >
           <FontAwesomeIcon icon={faCrosshairs} className="h-3.5 w-3.5 text-blue-400" />
