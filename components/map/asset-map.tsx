@@ -420,26 +420,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
-  const buildExportBaseName = () => {
-    const safeDeviceName = activeDeviceName.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Device';
-    const wpCount = terminalLogs.length;
-
-    const firstLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[0]) : Date.now();
-    const lastLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[wpCount - 1]) : Date.now();
-
-    const startDateObj = startDateTime
-      ? getNormalizedDate(startDateTime)
-      : new Date(firstLogMs);
-    const endDateObj = endDateTime
-      ? getNormalizedDate(endDateTime)
-      : new Date(lastLogMs);
-
-    const startCode = formatDdMmyyyyHh(startDateObj);
-    const endCode = formatDdMmyyyyHh(endDateObj);
-
-    return `${safeDeviceName}_${wpCount}WP_AS_${startCode}_to_${endCode}`;
-  };
-
   useEffect(() => {
     if (!isClient) return;
     const map = mapRef.current;
@@ -471,7 +451,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
       const animatedPolyline = L.polyline(currentSegmentLatLngs, {
-        color: '#eab308',
+        color: '#2563eb',
         weight: 4,
         opacity: 0.9,
         dashArray: '1, 12',
@@ -717,6 +697,33 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }, 150);
   };
 
+  const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
+  const latestDistanceInfo =
+    distanceMetrics.length > 0 ? distanceMetrics[distanceMetrics.length - 1] : { legKm: 0, cumulativeKm: 0 };
+  const latestBattery = getBatteryStats(latestLog?.battery_voltage);
+  const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
+  const expectedDeletePhrase = `DELETE DEVICE ${activeDeviceName}`;
+
+  const buildExportBaseName = () => {
+    const safeDeviceName = activeDeviceName.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Device';
+    const wpCount = terminalLogs.length;
+
+    const firstLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[0]) : Date.now();
+    const lastLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[wpCount - 1]) : Date.now();
+
+    const startDateObj = startDateTime
+      ? getNormalizedDate(startDateTime)
+      : new Date(firstLogMs);
+    const endDateObj = endDateTime
+      ? getNormalizedDate(endDateTime)
+      : new Date(lastLogMs);
+
+    const startCode = formatDdMmyyyyHh(startDateObj);
+    const endCode = formatDdMmyyyyHh(endDateObj);
+
+    return `${safeDeviceName}_${wpCount}WP_AS_${startCode}_to_${endCode}`;
+  };
+
   const handleExportMapImage = async () => {
     const map = mapRef.current;
     const container = mapContainerRef.current;
@@ -767,7 +774,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           if (idx === 0) ctx.moveTo(p.x, p.y);
           else ctx.lineTo(p.x, p.y);
         });
-        ctx.strokeStyle = '#eab308';
+        ctx.strokeStyle = '#2563eb';
         ctx.lineWidth = 4;
         ctx.setLineDash([6, 8]);
         ctx.stroke();
@@ -807,13 +814,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       setIsExportingImage(false);
     }
   };
-
-  const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
-  const latestDistanceInfo =
-    distanceMetrics.length > 0 ? distanceMetrics[distanceMetrics.length - 1] : { legKm: 0, cumulativeKm: 0 };
-  const latestBattery = getBatteryStats(latestLog?.battery_voltage);
-  const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
-  const expectedDeletePhrase = `DELETE DEVICE ${activeDeviceName}`;
 
   const latestElevation = latestLog?.elevation !== null && latestLog?.elevation !== undefined ? `${latestLog.elevation}m` : 'N/A';
   const latestTemp = latestLog?.temperature !== null && latestLog?.temperature !== undefined ? `${latestLog.temperature}°C` : 'N/A';
