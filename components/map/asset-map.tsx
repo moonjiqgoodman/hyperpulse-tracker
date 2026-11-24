@@ -196,6 +196,25 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     return parts.replace(' ', 'T');
   };
 
+  const formatDdMmyyyyHh = (date: Date) => {
+    if (isNaN(date.getTime()) || date.getTime() === 0) return '0000000000';
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+
+    const map: Record<string, string> = {};
+    for (const p of parts) {
+      if (p.type !== 'literal') map[p.type] = p.value;
+    }
+    const hh = map.hour === '24' ? '00' : (map.hour || '00');
+    return `${map.day || '00'}${map.month || '00'}${map.year || '0000'}${hh}`;
+  };
+
   const getGpsSortTime = (log: any) => {
     const rawGps = log?.recorded_at !== undefined && log?.recorded_at !== null && log?.recorded_at !== ''
       ? log.recorded_at
@@ -399,6 +418,26 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       setStartDateTime(toMytInputValue(start));
       setEndDateTime(toMytInputValue(end));
     }
+  };
+
+  const buildExportBaseName = () => {
+    const safeDeviceName = activeDeviceName.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Device';
+    const wpCount = terminalLogs.length;
+
+    const firstLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[0]) : Date.now();
+    const lastLogMs = wpCount > 0 ? getGpsSortTime(terminalLogs[wpCount - 1]) : Date.now();
+
+    const startDateObj = startDateTime
+      ? getNormalizedDate(startDateTime)
+      : new Date(firstLogMs);
+    const endDateObj = endDateTime
+      ? getNormalizedDate(endDateTime)
+      : new Date(lastLogMs);
+
+    const startCode = formatDdMmyyyyHh(startDateObj);
+    const endCode = formatDdMmyyyyHh(endDateObj);
+
+    return `${safeDeviceName}_${wpCount}WP_AS_${startCode}_to_${endCode}`;
   };
 
   useEffect(() => {
@@ -756,7 +795,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `${activeDeviceName.replace(/[^a-zA-Z0-9]/g, '_')}_map_route.png`;
+      link.download = `${buildExportBaseName()}.png`;
       link.href = dataUrl;
       document.body.appendChild(link);
       link.click();
@@ -880,7 +919,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${activeDeviceName.replace(/[^a-zA-Z0-9]/g, '_')}_telemetry_history.csv`);
+    link.setAttribute('download', `${buildExportBaseName()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -982,68 +1021,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
         </div>
 
-        {/* Filter Bar */}
-        {allTerminalLogs.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 bg-muted/40 rounded-lg border border-border/60 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[11px] font-semibold text-foreground">
-                Filter:
-              </span>
-
-              <select
-                value={rangePreset}
-                onChange={(e) => handlePresetChange(e.target.value)}
-                className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
-              >
-                <option value="ALL">All Time</option>
-                <option value="1">Last 1 Hour</option>
-                <option value="3">Last 3 Hours</option>
-                <option value="6">Last 6 Hours</option>
-                <option value="12">Last 12 Hours</option>
-                <option value="24">Last 24 Hours</option>
-                <option value="CUSTOM">Custom Range</option>
-              </select>
-
-              <label className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                <span>From</span>
-                <input
-                  type="datetime-local"
-                  value={startDateTime}
-                  onChange={(e) => {
-                    setStartDateTime(e.target.value);
-                    setRangePreset('CUSTOM');
-                  }}
-                  className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </label>
-
-              <label className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                <span>To</span>
-                <input
-                  type="datetime-local"
-                  value={endDateTime}
-                  onChange={(e) => {
-                    setEndDateTime(e.target.value);
-                    setRangePreset('CUSTOM');
-                  }}
-                  className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </label>
-            </div>
-
-            {isFiltered && (
-              <button
-                type="button"
-                onClick={() => handlePresetChange('ALL')}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 cursor-pointer transition-colors font-mono text-[10px] font-semibold"
-              >
-                <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
-                <span>Clear</span>
-              </button>
-            )}
-          </div>
-        )}
-
         <div className="no-scrollbar flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
@@ -1119,6 +1096,66 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           className="w-full z-0"
           style={{ height: isFullscreen ? '100vh' : '450px', minHeight: '400px' }}
         />
+
+        {/* Floating Transparent Filter Bar Above Map */}
+        {allTerminalLogs.length > 0 && (
+          <div className="absolute top-3 left-3 z-[20] max-w-[calc(100%-240px)] flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950/60 hover:bg-slate-950/75 text-white border border-white/15 backdrop-blur-md shadow-lg text-xs transition-colors">
+            <span className="font-mono text-[11px] font-semibold text-white">
+              Filter:
+            </span>
+
+            <select
+              value={rangePreset}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              className="bg-slate-900/70 text-white border border-white/15 rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-amber-400/60 cursor-pointer"
+            >
+              <option value="ALL" className="bg-slate-900 text-white">All Time</option>
+              <option value="1" className="bg-slate-900 text-white">Last 1 Hour</option>
+              <option value="3" className="bg-slate-900 text-white">Last 3 Hours</option>
+              <option value="6" className="bg-slate-900 text-white">Last 6 Hours</option>
+              <option value="12" className="bg-slate-900 text-white">Last 12 Hours</option>
+              <option value="24" className="bg-slate-900 text-white">Last 24 Hours</option>
+              <option value="CUSTOM" className="bg-slate-900 text-white">Custom Range</option>
+            </select>
+
+            <label className="flex items-center gap-1 text-[11px] font-mono text-white/80">
+              <span>From</span>
+              <input
+                type="datetime-local"
+                value={startDateTime}
+                onChange={(e) => {
+                  setStartDateTime(e.target.value);
+                  setRangePreset('CUSTOM');
+                }}
+                className="bg-slate-900/70 text-white border border-white/15 rounded-md px-2 py-0.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-amber-400/60"
+              />
+            </label>
+
+            <label className="flex items-center gap-1 text-[11px] font-mono text-white/80">
+              <span>To</span>
+              <input
+                type="datetime-local"
+                value={endDateTime}
+                onChange={(e) => {
+                  setEndDateTime(e.target.value);
+                  setRangePreset('CUSTOM');
+                }}
+                className="bg-slate-900/70 text-white border border-white/15 rounded-md px-2 py-0.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-amber-400/60"
+              />
+            </label>
+
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={() => handlePresetChange('ALL')}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/30 cursor-pointer transition-colors font-mono text-[10px] font-semibold"
+              >
+                <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="absolute top-3 right-3 z-[20] flex items-center gap-2">
           <button
