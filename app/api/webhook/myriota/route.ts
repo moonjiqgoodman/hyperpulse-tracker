@@ -11,19 +11,21 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-const VALID_CERT_URL = process.env.MYRIOTA_CERT_URL || "https://security.myriota.com/data-13f7751f3c5df569a6c9c42a9ce73a8a.crt";
+const VALID_CERT_URL =
+  process.env.MYRIOTA_CERT_URL ||
+  'https://security.myriota.com/data-13f7751f3c5df569a6c9c42a9ce73a8a.crt';
 
 async function getAddressFromCoords(lat: number, lng: number) {
-  if (lat === 0 && lng === 0) return "Unknown Location";
+  if (lat === 0 && lng === 0) return 'Unknown Location';
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
       { headers: { 'User-Agent': 'MyriotaAssetHawkTracker/1.0' } }
     );
     const data = await response.json();
-    return data.display_name || "Address not found"; 
+    return data.display_name || 'Address not found';
   } catch (error) {
-    return "Address lookup failed";
+    return 'Address lookup failed';
   }
 }
 
@@ -34,8 +36,13 @@ export async function POST(request: Request) {
 
     // 1. Strict Certificate URL Validation
     if (payload.CertificateUrl !== VALID_CERT_URL) {
-      console.warn(`[Security Warning] Rejected payload with invalid or missing CertificateUrl: ${payload.CertificateUrl}`);
-      return NextResponse.json({ status: 'error', message: 'Invalid or unauthorized CertificateUrl' }, { status: 403 });
+      console.warn(
+        `[Security Warning] Rejected payload with invalid or missing CertificateUrl: ${payload.CertificateUrl}`
+      );
+      return NextResponse.json(
+        { status: 'error', message: 'Invalid or unauthorized CertificateUrl' },
+        { status: 403 }
+      );
     }
 
     let parsedData = payload;
@@ -44,39 +51,57 @@ export async function POST(request: Request) {
       try {
         parsedData = JSON.parse(parsedData.Data);
       } catch (e) {
+        // Keep raw payload if Data is not valid JSON
       }
     }
 
     const packet = parsedData.Packets?.[0] || parsedData;
 
-    let terminalId = 
-      packet.TerminalId || 
-      packet.terminal_id || 
-      parsedData.TerminalId || 
-      parsedData.terminal_id || 
-      payload.TerminalId || 
+    const terminalId =
+      packet.TerminalId ||
+      packet.terminal_id ||
+      parsedData.TerminalId ||
+      parsedData.terminal_id ||
+      payload.TerminalId ||
       'UNKNOWN_ASSET';
 
     let innerVal = packet.Value || packet.Data || packet.message || packet;
     if (typeof innerVal === 'string') {
-      try { innerVal = JSON.parse(innerVal); } catch (e) {}
+      try {
+        innerVal = JSON.parse(innerVal);
+      } catch (e) {
+        // Keep string if not JSON
+      }
     }
 
-    const dataObj = Array.isArray(innerVal) ? innerVal[0] : (Array.isArray(packet.Data) ? packet.Data[0] : innerVal);
+    const dataObj = Array.isArray(innerVal)
+      ? innerVal[0]
+      : Array.isArray(packet.Data)
+      ? packet.Data[0]
+      : innerVal;
 
     const lat = parseFloat(dataObj?.latitude || dataObj?.lat || 0);
     const lng = parseFloat(dataObj?.longitude || dataObj?.lng || dataObj?.lon || 0);
-    const elevation = dataObj?.elevation !== undefined ? parseFloat(dataObj.elevation) : null;
-    const temperature = dataObj?.temperature !== undefined ? parseFloat(dataObj.temperature) : null;
-    const batteryVoltage = dataObj?.battery_voltage !== undefined ? parseFloat(dataObj.battery_voltage) : null;
+    const elevation =
+      dataObj?.elevation !== undefined && dataObj?.elevation !== null
+        ? parseFloat(dataObj.elevation)
+        : null;
+    const temperature =
+      dataObj?.temperature !== undefined && dataObj?.temperature !== null
+        ? parseFloat(dataObj.temperature)
+        : null;
+    const batteryVoltage =
+      dataObj?.battery_voltage !== undefined && dataObj?.battery_voltage !== null
+        ? parseFloat(dataObj.battery_voltage)
+        : null;
 
     const currentAddress = await getAddressFromCoords(lat, lng);
-    
-    const gpsTimeSec = dataObj?.time; 
-    const serverTimestampMs = packet.Timestamp || Date.now(); 
 
-    const gpsEpochMs = gpsTimeSec ? gpsTimeSec * 1000 : serverTimestampMs;
-    const serverEpochMs = serverTimestampMs;
+    const gpsTimeSec = dataObj?.time;
+    const serverTimestampMs = packet.Timestamp || Date.now();
+
+    const gpsEpochMs = gpsTimeSec ? Number(gpsTimeSec) * 1000 : Number(serverTimestampMs);
+    const serverEpochMs = Number(serverTimestampMs);
 
     const formatToMytSqlString = (ms: number) => {
       const date = new Date(ms);
@@ -98,24 +123,80 @@ export async function POST(request: Request) {
     const timestampMy = formatToMytSqlString(serverEpochMs);
 
     const query = `
-      INSERT INTO telemetry_logs (terminal_id, latitude, longitude, elevation, temperature, address, battery_voltage, recorded_at, timestamp_my) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO telemetry_logs (
+        terminal_id,
+        latitude,
+        longitude,
+        elevation,
+        temperature,
+        address,
+        battery_voltage,
+        recorded_at,
+        timestamp_my
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    await pool.execute(query, [terminalId, lat, lng, elevation, temperature, currentAddress, batteryVoltage, recordedAtMyt, timestampMy]);
 
-    console.log(`DB saved for ${terminalId} -> Lat: ${lat}, Lng: ${lng}, GPS Time (MYT): ${recordedAtMyt}, Server Time (MYT): ${timestampMy}`);
-    return NextResponse.json({ status: 'success', terminalId, latitude: lat, longitude: lng, elevation, temperature, batteryVoltage, recordedAt: recordedAtMyt, timestampMy }, { status: 200 });
+    await pool.execute(query, [
+      terminalId,
+      lat,
+      lng,
+      elevation,
+      temperature,
+      currentAddress,
+      batteryVoltage,
+      recordedAtMyt,
+      timestampMy,
+    ]);
 
+    console.log(
+      `DB saved for ${terminalId} -> Lat: ${lat}, Lng: ${lng}, GPS Time (MYT): ${recordedAtMyt}, Server Time (MYT): ${timestampMy}`
+    );
+
+    return NextResponse.json(
+      {
+        status: 'success',
+        terminalId,
+        latitude: lat,
+        longitude: lng,
+        elevation,
+        temperature,
+        batteryVoltage,
+        recordedAt: recordedAtMyt,
+        timestampMy,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Database save error:', error);
-    return NextResponse.json({ status: 'error', message: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      { status: 'error', message: 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const terminalId = searchParams.get('terminal_id');
+
+    if (terminalId) {
+      const [rows] = await pool.execute(
+        `SELECT * FROM telemetry_logs
+         WHERE terminal_id = ?
+           AND latitude <> 0
+           AND longitude <> 0
+         ORDER BY id ASC`,
+        [terminalId]
+      );
+      return NextResponse.json(rows, { status: 200 });
+    }
+
     const [rows] = await pool.execute(
-      'SELECT * FROM telemetry_logs ORDER BY recorded_at DESC LIMIT 50'
+      `SELECT * FROM telemetry_logs
+       WHERE latitude <> 0
+         AND longitude <> 0
+       ORDER BY id ASC`
     );
     return NextResponse.json(rows, { status: 200 });
   } catch (error) {
@@ -134,7 +215,10 @@ export async function DELETE(request: Request) {
     }
 
     await pool.execute('DELETE FROM telemetry_logs WHERE terminal_id = ?', [terminalId]);
-    return NextResponse.json({ status: 'success', message: `Deleted logs for ${terminalId}` }, { status: 200 });
+    return NextResponse.json(
+      { status: 'success', message: `Deleted logs for ${terminalId}` },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Database delete error:', error);
     return NextResponse.json({ error: 'Failed to delete telemetry logs' }, { status: 500 });
