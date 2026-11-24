@@ -21,8 +21,9 @@ import {
   faExpand,
   faCompress,
   faCamera,
-  faCalendarDay,
+  faFilter,
   faRotateLeft,
+  faRoute,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
@@ -51,6 +52,27 @@ const MESSAGE_REASONS: Record<number, string> = {
   7: 'Alert interval elapsed (ongoing alert state)',
 };
 
+/**
+ * Haversine distance in kilometers between two GPS coordinates
+ */
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  if ([lat1, lon1, lat2, lon2].some((v) => isNaN(v))) return 0;
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatKm(km: number): string {
+  if (km < 0.01) return '0.00 km';
+  return `${km.toFixed(2)} km`;
+}
+
 export default function AssetMap({ devices = [], selectedDevice, registeredDevices = [], onDataReset }: AssetMapProps) {
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -70,6 +92,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   // Date & Time Range Filter States (YYYY-MM-DDTHH:mm in MYT)
   const [startDateTime, setStartDateTime] = useState<string>('');
   const [endDateTime, setEndDateTime] = useState<string>('');
+  const [rangePreset, setRangePreset] = useState<string>('ALL');
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
@@ -315,7 +338,6 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
 
-  // Route ordered strictly by GPS time ascending so the latest GPS time is last
   const allTerminalLogs = useMemo(() => {
     return devices
       .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
@@ -334,26 +356,50 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     });
   }, [allTerminalLogs, startDateTime, endDateTime]);
 
-  // Refit map bounds whenever date/time filter changes
+  const distanceMetrics = useMemo(() => {
+    let cumulative = 0;
+    return terminalLogs.map((log: any, idx: number) => {
+      if (idx === 0) {
+        return { legKm: 0, cumulativeKm: 0 };
+      }
+      const prev = terminalLogs[idx - 1];
+      const legKm = calculateDistanceKm(
+        parseFloat(prev.latitude),
+        parseFloat(prev.longitude),
+        parseFloat(log.latitude),
+        parseFloat(log.longitude)
+      );
+      cumulative += legKm;
+      return { legKm, cumulativeKm: cumulative };
+    });
+  }, [terminalLogs]);
+
   useEffect(() => {
     hasFittedBoundsRef.current = false;
     setIsPlaying(false);
     setCurrentPlaybackIndex(null);
   }, [startDateTime, endDateTime]);
 
-  const applyPresetHours = (hours: number | null) => {
-    if (hours === null) {
+  const handlePresetChange = (value: string) => {
+    setRangePreset(value);
+    if (value === 'ALL') {
       setStartDateTime('');
       setEndDateTime('');
       return;
     }
-    const latestMs = allTerminalLogs.length > 0
-      ? getGpsSortTime(allTerminalLogs[allTerminalLogs.length - 1])
-      : Date.now();
-    const end = new Date(latestMs);
-    const start = new Date(latestMs - hours * 60 * 60 * 1000);
-    setStartDateTime(toMytInputValue(start));
-    setEndDateTime(toMytInputValue(end));
+    if (value === 'CUSTOM') {
+      return;
+    }
+    const hours = Number(value);
+    if (!isNaN(hours) && hours > 0) {
+      const latestMs = allTerminalLogs.length > 0
+        ? getGpsSortTime(allTerminalLogs[allTerminalLogs.length - 1])
+        : Date.now();
+      const end = new Date(latestMs);
+      const start = new Date(latestMs - hours * 60 * 60 * 1000);
+      setStartDateTime(toMytInputValue(start));
+      setEndDateTime(toMytInputValue(end));
+    }
   };
 
   useEffect(() => {
@@ -401,6 +447,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const lng = parseFloat(log.longitude);
         const isLatest = index === terminalLogs.length - 1;
         const waypointNumber = index + 1;
+        const distInfo = distanceMetrics[index] || { legKm: 0, cumulativeKm: 0 };
 
         const markerColor = isLatest ? '#16a34a' : WAYPOINT_COLORS[index % WAYPOINT_COLORS.length];
         const deviceName = getDeviceName(log.terminal_id);
@@ -415,10 +462,15 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         const copyKeyId = `waypoint-${waypointNumber}`;
         const isCopied = copiedKey === copyKeyId;
 
+        const legDistanceText =
+          index === 0
+            ? 'Start point (0.00 km)'
+            : `${formatKm(distInfo.legKm)} (from #${waypointNumber - 1})`;
+
         const popupContent = document.createElement('div');
         popupContent.style.fontSize = '12px';
         popupContent.style.fontFamily = 'inherit';
-        popupContent.style.minWidth = '260px';
+        popupContent.style.minWidth = '270px';
 
         popupContent.innerHTML = `
           <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
@@ -427,12 +479,20 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           <table style="width: 100%; border-collapse: collapse;">
             <tbody>
               <tr>
-                <td style="padding: 2px 0; color: #6b7280; width: 35%;">Device:</td>
+                <td style="padding: 2px 0; color: #6b7280; width: 38%;">Device:</td>
                 <td style="padding: 2px 0; font-weight: 600;">${deviceName}</td>
               </tr>
               <tr>
                 <td style="padding: 2px 0; color: #6b7280;">Battery:</td>
                 <td style="padding: 2px 0; font-weight: 600;">${batteryInfo.text}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Leg Distance:</td>
+                <td style="padding: 2px 0; font-weight: 700; color: #2563eb;">${legDistanceText}</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; color: #6b7280;">Total Distance:</td>
+                <td style="padding: 2px 0; font-weight: 600;">${formatKm(distInfo.cumulativeKm)}</td>
               </tr>
               <tr>
                 <td style="padding: 2px 0; color: #6b7280;">Coordinates:</td>
@@ -521,7 +581,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hasFittedBoundsRef.current = true;
       }
     });
-  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex, terminalLogs]);
+  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex, terminalLogs, distanceMetrics]);
 
   useEffect(() => {
     if (!isPlaying || terminalLogs.length === 0) {
@@ -711,6 +771,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   };
 
   const latestLog = terminalLogs.length > 0 ? terminalLogs[terminalLogs.length - 1] : null;
+  const latestDistanceInfo =
+    distanceMetrics.length > 0 ? distanceMetrics[distanceMetrics.length - 1] : { legKm: 0, cumulativeKm: 0 };
   const latestBattery = getBatteryStats(latestLog?.battery_voltage);
   const activeDeviceName = targetTerminal ? getDeviceName(targetTerminal) : 'N/A';
   const expectedDeletePhrase = `DELETE DEVICE ${activeDeviceName}`;
@@ -754,6 +816,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       'Terminal ID',
       'Latitude',
       'Longitude',
+      'Leg Distance (km)',
+      'Cumulative Distance (km)',
       'Elevation (m)',
       'Temperature (°C)',
       'Battery (%)',
@@ -767,6 +831,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const devName = getDeviceName(log.terminal_id);
       const lat = log.latitude;
       const lng = log.longitude;
+      const dist = distanceMetrics[idx] || { legKm: 0, cumulativeKm: 0 };
       const elevation = log.elevation !== null && log.elevation !== undefined ? log.elevation : 'N/A';
       const temperature = log.temperature !== null && log.temperature !== undefined ? log.temperature : 'N/A';
       const batt = log.battery_voltage !== null && log.battery_voltage !== undefined ? `${getBatteryStats(log.battery_voltage).percent}%` : 'N/A';
@@ -798,6 +863,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         `"${log.terminal_id}"`,
         lat,
         lng,
+        dist.legKm.toFixed(2),
+        dist.cumulativeKm.toFixed(2),
         elevation,
         temperature,
         batt,
@@ -857,13 +924,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <button
                   onClick={togglePlayAnimation}
                   disabled={terminalLogs.length === 0}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-xs disabled:opacity-40 ${
-                    isPlaying ? 'bg-amber-500 hover:bg-amber-600 text-black font-bold' : 'bg-primary hover:bg-primary/90 text-black font-bold'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-white transition-colors cursor-pointer shadow-xs disabled:opacity-40 ${
+                    isPlaying ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
                   }`}
-                  style={{ color: '#000000' }}
                   title={isPlaying ? 'Pause Animation' : 'Play Waypoint Animation'}
                 >
-                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3 text-black" />
+                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3 text-white" />
                   <span>{isPlaying ? 'Pause' : 'Play'}</span>
                 </button>
                 <button
@@ -907,21 +973,38 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
         </div>
 
-        {/* Date & Hour Range Filter Bar */}
+        {/* Filter Bar */}
         {allTerminalLogs.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 bg-muted/40 rounded-lg border border-border/60 text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-foreground">
-                <FontAwesomeIcon icon={faCalendarDay} className="h-3.5 w-3.5 text-primary" />
-                <span>GPS Range (GMT+8):</span>
+                <FontAwesomeIcon icon={faFilter} className="h-3.5 w-3.5 text-blue-500" />
+                <span>Filter:</span>
               </span>
+
+              <select
+                value={rangePreset}
+                onChange={(e) => handlePresetChange(e.target.value)}
+                className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+              >
+                <option value="ALL">All Time</option>
+                <option value="1">Last 1 Hour</option>
+                <option value="3">Last 3 Hours</option>
+                <option value="6">Last 6 Hours</option>
+                <option value="12">Last 12 Hours</option>
+                <option value="24">Last 24 Hours</option>
+                <option value="CUSTOM">Custom Range</option>
+              </select>
 
               <label className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
                 <span>From</span>
                 <input
                   type="datetime-local"
                   value={startDateTime}
-                  onChange={(e) => setStartDateTime(e.target.value)}
+                  onChange={(e) => {
+                    setStartDateTime(e.target.value);
+                    setRangePreset('CUSTOM');
+                  }}
                   className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </label>
@@ -931,38 +1014,25 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <input
                   type="datetime-local"
                   value={endDateTime}
-                  onChange={(e) => setEndDateTime(e.target.value)}
+                  onChange={(e) => {
+                    setEndDateTime(e.target.value);
+                    setRangePreset('CUSTOM');
+                  }}
                   className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </label>
             </div>
 
-            <div className="flex items-center gap-1.5 font-mono text-[10px]">
+            {isFiltered && (
               <button
                 type="button"
-                onClick={() => applyPresetHours(6)}
-                className="px-2 py-1 rounded bg-background hover:bg-muted text-foreground border border-border cursor-pointer transition-colors"
+                onClick={() => handlePresetChange('ALL')}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 cursor-pointer transition-colors font-mono text-[10px] font-semibold"
               >
-                Last 6h
+                <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
+                <span>Clear</span>
               </button>
-              <button
-                type="button"
-                onClick={() => applyPresetHours(24)}
-                className="px-2 py-1 rounded bg-background hover:bg-muted text-foreground border border-border cursor-pointer transition-colors"
-              >
-                Last 24h
-              </button>
-              {isFiltered && (
-                <button
-                  type="button"
-                  onClick={() => applyPresetHours(null)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 cursor-pointer transition-colors font-semibold"
-                >
-                  <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
-                  <span>All</span>
-                </button>
-              )}
-            </div>
+            )}
           </div>
         )}
 
@@ -972,16 +1042,27 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
             const waypointNum = idx + 1;
             const isHighlighted = currentPlaybackIndex === idx;
+            const legKm = distanceMetrics[idx]?.legKm ?? 0;
 
             const transmitTimeAgo = getServerTimeAgo(log.timestamp_my);
             const fullTransmitMyt = formatServerTimeToMalaysia12Hour(log);
             const gpsTimeMyt = formatGpsTimeToMalaysia12Hour(log);
 
+            const distanceTitle =
+              idx === 0
+                ? 'Start point'
+                : `Point #${waypointNum - 1} to #${waypointNum}: ${formatKm(legKm)}`;
+
             return (
               <React.Fragment key={idx}>
                 {idx > 0 && (
-                  <div className="text-muted-foreground/40 font-mono select-none shrink-0">
-                    ----
+                  <div className="flex flex-col items-center shrink-0 px-0.5 select-none">
+                    <span className="text-[9px] font-mono font-semibold text-blue-500">
+                      {formatKm(legKm)}
+                    </span>
+                    <span className="text-muted-foreground/40 font-mono leading-none">
+                      ----
+                    </span>
                   </div>
                 )}
                 <button
@@ -991,7 +1072,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                       ? 'bg-primary/10 border-primary ring-2 ring-primary/30'
                       : 'bg-background hover:bg-muted/80 border-border'
                   }`}
-                  title={`Focus on Waypoint #${waypointNum}\nGPS Time: ${gpsTimeMyt}\nTransmitted: ${fullTransmitMyt}`}
+                  title={`Focus on Waypoint #${waypointNum}\n${distanceTitle}\nGPS Time: ${gpsTimeMyt}\nTransmitted: ${fullTransmitMyt}`}
                 >
                   <span
                     className="h-6 w-6 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
@@ -1003,8 +1084,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                     <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
                       {isLast ? 'Latest' : `Step ${waypointNum}`}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {transmitTimeAgo}
+                    <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                      <span>{transmitTimeAgo}</span>
+                      {idx > 0 && (
+                        <span className="text-blue-500 font-semibold">
+                          • +{formatKm(legKm)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -1061,13 +1147,13 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         <div className="text-xs bg-destructive/10 text-destructive p-3 rounded-lg border border-destructive/20 flex items-center justify-between gap-2">
           <span>
             {isFiltered
-              ? 'No waypoints match the selected start and end date/time range.'
+              ? 'No waypoints match the selected filter range.'
               : 'No waypoints found. Select a device from the sidebar or wait for incoming packets.'}
           </span>
           {isFiltered && (
             <button
               type="button"
-              onClick={() => applyPresetHours(null)}
+              onClick={() => handlePresetChange('ALL')}
               className="px-2.5 py-1 rounded bg-background text-foreground border border-border text-[11px] font-mono cursor-pointer shrink-0"
             >
               Clear Filter
@@ -1085,14 +1171,25 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <div>
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
-            <div>
-              Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
+            <div className="flex items-center gap-3 font-mono">
+              <span>
+                Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-blue-500 font-bold">
+                <FontAwesomeIcon icon={faRoute} className="h-3 w-3" />
+                <span>Total: {formatKm(latestDistanceInfo.cumulativeKm)}</span>
+              </span>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono">
             <div>
               <span className="text-muted-foreground/80">Latest Coordinates:</span>{' '}
               <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
+              {terminalLogs.length > 1 && (
+                <span className="ml-2 text-blue-500 font-semibold">
+                  (+{formatKm(latestDistanceInfo.legKm)} from #{terminalLogs.length - 1})
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-muted-foreground/80">Elevation & Temp:</span>{' '}
