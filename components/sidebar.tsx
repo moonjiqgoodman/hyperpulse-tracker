@@ -59,36 +59,46 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     return () => clearInterval(timer);
   }, []);
 
-  const getNormalizedDate = (dateString: string) => {
+  const getNormalizedDate = (dateString: any) => {
     if (!dateString) return new Date(0);
     try {
-      const dateStr = String(dateString);
+      const dateStr = String(dateString).trim();
       if (!dateStr.includes('+') && !dateStr.endsWith('Z')) {
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
 
-      const normalizedString = dateStr.endsWith('Z') || dateStr.includes('+') 
-        ? dateStr 
-        : dateStr.replace(' ', 'T') + 'Z';
+      const normalizedString =
+        dateStr.endsWith('Z') || dateStr.includes('+')
+          ? dateStr
+          : dateStr.replace(' ', 'T') + 'Z';
       return new Date(normalizedString);
     } catch (e) {
       return new Date(0);
     }
   };
 
-  const isOnline = (timestampMy: string) => {
-    const lastSeen = getNormalizedDate(timestampMy).getTime();
-    const now = new Date().getTime();
-    return (now - lastSeen) <= 24 * 60 * 60 * 1000;
+  const getLatestTimestampMs = (log: DeviceLog) => {
+    const serverMs = getNormalizedDate(log.timestamp_my).getTime();
+    const recordedMs = getNormalizedDate(log.recorded_at).getTime();
+    const validServer = !isNaN(serverMs) && serverMs > 0 ? serverMs : 0;
+    const validRecorded = !isNaN(recordedMs) && recordedMs > 0 ? recordedMs : 0;
+    return Math.max(validServer, validRecorded);
   };
 
-  const getTimeAgo = (timestampMy: string) => {
-    if (!timestampMy) return 'Unknown';
+  const isOnline = (device: DeviceLog) => {
+    const lastSeen = getLatestTimestampMs(device);
+    if (!lastSeen) return false;
+    const now = Date.now();
+    return now - lastSeen <= 24 * 60 * 60 * 1000;
+  };
+
+  const getTimeAgo = (device: DeviceLog) => {
+    const past = getLatestTimestampMs(device);
+    if (!past) return 'Unknown';
     try {
-      const past = getNormalizedDate(timestampMy).getTime();
-      const now = new Date().getTime();
-      const diffMs = now - past;
-      
+      const now = Date.now();
+      const diffMs = Math.max(0, now - past);
+
       const diffMins = Math.floor(diffMs / (1000 * 60));
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -102,12 +112,12 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  const formatServerTimeToMalaysia = (device: any) => {
-    const targetTimeVal = device.timestamp_my || device.recorded_at;
-    if (!targetTimeVal) return 'N/A';
+  const formatServerTimeToMalaysia = (device: DeviceLog) => {
+    const ms = getLatestTimestampMs(device);
+    if (!ms) return 'N/A';
     try {
-      const date = getNormalizedDate(targetTimeVal);
-      if (isNaN(date.getTime())) return String(targetTimeVal);
+      const date = new Date(ms);
+      if (isNaN(date.getTime())) return String(device.timestamp_my || device.recorded_at);
 
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Kuala_Lumpur',
@@ -119,24 +129,26 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
         hour12: false,
       }).format(date);
     } catch (e) {
-      return String(targetTimeVal);
+      return String(device.timestamp_my || device.recorded_at);
     }
   };
 
   const getDeviceFrequencyInfo = (terminalId: string) => {
-    const deviceLogs = devices.filter(d => String(d.terminal_id).trim() === String(terminalId).trim());
+    const deviceLogs = devices.filter(
+      (d) => String(d.terminal_id).trim() === String(terminalId).trim()
+    );
     if (deviceLogs.length <= 1) return 'First msg';
 
     const timestamps = deviceLogs
-      .map(d => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
-      .filter(t => !isNaN(t) && t > 0)
+      .map((d) => getNormalizedDate(d.timestamp_my || d.recorded_at).getTime())
+      .filter((t) => !isNaN(t) && t > 0)
       .sort((a, b) => a - b);
 
     if (timestamps.length < 2) return '1 msg';
 
     let totalDiffMs = 0;
     for (let i = 1; i < timestamps.length; i++) {
-      totalDiffMs += (timestamps[i] - timestamps[i - 1]);
+      totalDiffMs += timestamps[i] - timestamps[i - 1];
     }
     const avgDiffMs = totalDiffMs / (timestamps.length - 1);
     const avgDiffMins = Math.round(avgDiffMs / (1000 * 60));
@@ -151,16 +163,19 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
     }
   };
 
-  const uniqueDevicesMap = new Map();
+  // Pick the latest telemetry entry per terminal_id (not the first row in table order)
+  const latestDevicesMap = new Map<string, DeviceLog>();
   devices.forEach((d) => {
-    if (!uniqueDevicesMap.has(d.terminal_id)) {
-      uniqueDevicesMap.set(d.terminal_id, d);
+    const key = String(d.terminal_id).trim();
+    const existing = latestDevicesMap.get(key);
+    if (!existing || getLatestTimestampMs(d) >= getLatestTimestampMs(existing)) {
+      latestDevicesMap.set(key, d);
     }
   });
-  const deviceList = Array.from(uniqueDevicesMap.values());
+  const deviceList = Array.from(latestDevicesMap.values());
 
   const filteredDevices = deviceList.filter((device) => {
-    const online = isOnline(device.timestamp_my || device.recorded_at);
+    const online = isOnline(device);
     if (filter === 'ONLINE') return online;
     if (filter === 'OFFLINE') return !online;
     return true;
@@ -169,17 +184,19 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
   return (
     <>
       {isOpen && (
-        <div 
+        <div
           onClick={onCloseMobile}
           className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-xs transition-opacity"
         />
       )}
 
-      <aside className={`
+      <aside
+        className={`
         fixed inset-y-0 left-0 z-50 w-72 bg-card text-card-foreground flex flex-col h-screen border-r border-border select-none transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      `}
+      >
         <div className="p-4 border-b border-border flex flex-col gap-3">
           <div className="flex flex-col items-center justify-center text-center gap-1.5 relative">
             <span className="absolute right-0 top-0 text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
@@ -187,10 +204,10 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </span>
 
             <div className="relative w-36 h-8 flex items-center justify-center mt-1">
-              <Image 
-                src="/ipinfra_logo.png" 
-                alt="Logo" 
-                fill 
+              <Image
+                src="/ipinfra_logo.png"
+                alt="Logo"
+                fill
                 className="object-contain"
                 priority
               />
@@ -223,17 +240,28 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
             </div>
           ) : (
             filteredDevices.map((device) => {
-              const online = isOnline(device.timestamp_my || device.recorded_at);
+              const online = isOnline(device);
               const isSelected = selectedDevice === device.terminal_id;
-              const timeAgoText = getTimeAgo(device.timestamp_my || device.recorded_at);
+              const timeAgoText = getTimeAgo(device);
               const malaysiaTimeText = formatServerTimeToMalaysia(device);
               const friendlyName = deviceNames[device.terminal_id];
               const frequencyText = getDeviceFrequencyInfo(device.terminal_id);
 
-              const elevationVal = device.elevation !== null && device.elevation !== undefined ? `${device.elevation}m` : 'N/A';
-              const tempVal = device.temperature !== null && device.temperature !== undefined ? `${device.temperature}°C` : 'N/A';
+              const elevationVal =
+                device.elevation !== null && device.elevation !== undefined
+                  ? `${device.elevation}m`
+                  : 'N/A';
+              const tempVal =
+                device.temperature !== null && device.temperature !== undefined
+                  ? `${device.temperature}°C`
+                  : 'N/A';
               const tempNum = device.temperature !== undefined ? Number(device.temperature) : 0;
-              const tempColorClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500' : 'text-blue-400';
+              const tempColorClass =
+                tempNum > 40
+                  ? 'text-destructive font-bold animate-pulse'
+                  : tempNum > 30
+                  ? 'text-amber-500'
+                  : 'text-blue-400';
 
               return (
                 <div
@@ -252,8 +280,12 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                     <div className="flex flex-col truncate max-w-[140px]">
                       {friendlyName ? (
                         <>
-                          <span className="text-xs font-bold text-foreground truncate">{friendlyName}</span>
-                          <span className="font-mono text-[10px] opacity-70 truncate">{device.terminal_id}</span>
+                          <span className="text-xs font-bold text-foreground truncate">
+                            {friendlyName}
+                          </span>
+                          <span className="font-mono text-[10px] opacity-70 truncate">
+                            {device.terminal_id}
+                          </span>
                         </>
                       ) : (
                         <span className="font-mono text-xs font-semibold tracking-wide truncate">
@@ -272,7 +304,7 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                       </span>
                     </span>
                   </div>
-                  
+
                   <p className="text-[11px] truncate opacity-80 mb-1.5">
                     {device.address || 'Unknown location'}
                   </p>
@@ -283,10 +315,16 @@ export default function Sidebar({ devices, selectedDevice, onSelectDevice, isOpe
                       <span>{elevationVal}</span>
                     </div>
                     <div className={`flex items-center gap-1 ${tempColorClass}`} title="Temperature">
-                      <FontAwesomeIcon icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow} className="h-2.5 w-2.5" />
+                      <FontAwesomeIcon
+                        icon={tempNum > 35 ? faTemperatureHigh : faTemperatureLow}
+                        className="h-2.5 w-2.5"
+                      />
                       <span>{tempVal}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-primary justify-end font-medium" title="Message Interval">
+                    <div
+                      className="flex items-center gap-1 text-primary justify-end font-medium"
+                      title="Message Interval"
+                    >
                       <FontAwesomeIcon icon={faClock} className="h-2.5 w-2.5" />
                       <span>{frequencyText}</span>
                     </div>

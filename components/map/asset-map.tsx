@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -21,6 +21,8 @@ import {
   faExpand,
   faCompress,
   faCamera,
+  faCalendarDay,
+  faRotateLeft,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface AssetMapProps {
@@ -64,6 +66,10 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const [isClient, setIsClient] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
+
+  // Date & Time Range Filter States (YYYY-MM-DDTHH:mm in MYT)
+  const [startDateTime, setStartDateTime] = useState<string>('');
+  const [endDateTime, setEndDateTime] = useState<string>('');
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
@@ -137,6 +143,14 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         return new Date(dateStr.replace(' ', 'T') + '+08:00');
       }
 
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateStr)) {
+        return new Date(dateStr + ':00+08:00');
+      }
+
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(dateStr)) {
+        return new Date(dateStr + '+08:00');
+      }
+
       if (dateStr.endsWith('Z') || dateStr.includes('+')) {
         return new Date(dateStr);
       }
@@ -145,6 +159,19 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     } catch (e) {
       return new Date(0);
     }
+  };
+
+  const toMytInputValue = (date: Date) => {
+    const parts = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+    return parts.replace(' ', 'T');
   };
 
   const getGpsSortTime = (log: any) => {
@@ -289,9 +316,45 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const targetTerminal = selectedDevice || (devices.length > 0 ? devices[0]?.terminal_id : null);
 
   // Route ordered strictly by GPS time ascending so the latest GPS time is last
-  const terminalLogs = devices
-    .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
-    .sort((a: any, b: any) => getGpsSortTime(a) - getGpsSortTime(b));
+  const allTerminalLogs = useMemo(() => {
+    return devices
+      .filter((item: any) => String(item.terminal_id).trim() === String(targetTerminal).trim())
+      .sort((a: any, b: any) => getGpsSortTime(a) - getGpsSortTime(b));
+  }, [devices, targetTerminal]);
+
+  const terminalLogs = useMemo(() => {
+    const startMs = startDateTime ? getNormalizedDate(startDateTime).getTime() : null;
+    const endMs = endDateTime ? getNormalizedDate(endDateTime).getTime() + 59999 : null;
+
+    return allTerminalLogs.filter((log: any) => {
+      const logMs = getGpsSortTime(log);
+      if (startMs && !isNaN(startMs) && logMs < startMs) return false;
+      if (endMs && !isNaN(endMs) && logMs > endMs) return false;
+      return true;
+    });
+  }, [allTerminalLogs, startDateTime, endDateTime]);
+
+  // Refit map bounds whenever date/time filter changes
+  useEffect(() => {
+    hasFittedBoundsRef.current = false;
+    setIsPlaying(false);
+    setCurrentPlaybackIndex(null);
+  }, [startDateTime, endDateTime]);
+
+  const applyPresetHours = (hours: number | null) => {
+    if (hours === null) {
+      setStartDateTime('');
+      setEndDateTime('');
+      return;
+    }
+    const latestMs = allTerminalLogs.length > 0
+      ? getGpsSortTime(allTerminalLogs[allTerminalLogs.length - 1])
+      : Date.now();
+    const end = new Date(latestMs);
+    const start = new Date(latestMs - hours * 60 * 60 * 1000);
+    setStartDateTime(toMytInputValue(start));
+    setEndDateTime(toMytInputValue(end));
+  };
 
   useEffect(() => {
     if (!isClient) return;
@@ -458,7 +521,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         hasFittedBoundsRef.current = true;
       }
     });
-  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex]);
+  }, [devices, selectedDevice, registeredDevices, isClient, copiedKey, currentPlaybackIndex, terminalLogs]);
 
   useEffect(() => {
     if (!isPlaying || terminalLogs.length === 0) {
@@ -781,17 +844,20 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
     }
   };
 
+  const isFiltered = Boolean(startDateTime || endDateTime);
+
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2">
-        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground px-1">
+      <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-muted-foreground px-1">
           <div className="flex items-center gap-2">
             <span>Waypoint:</span>
-            {terminalLogs.length > 0 && (
-              <div className="flex items-center gap-1.5 ml-2">
+            {allTerminalLogs.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-1">
                 <button
                   onClick={togglePlayAnimation}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-xs ${
+                  disabled={terminalLogs.length === 0}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-xs disabled:opacity-40 ${
                     isPlaying ? 'bg-amber-500 hover:bg-amber-600 text-black font-bold' : 'bg-primary hover:bg-primary/90 text-black font-bold'
                   }`}
                   style={{ color: '#000000' }}
@@ -802,7 +868,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 </button>
                 <button
                   onClick={resetPlayAnimation}
-                  className="flex items-center gap-1 bg-muted hover:bg-muted/80 text-foreground px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer border border-border"
+                  disabled={terminalLogs.length === 0}
+                  className="flex items-center gap-1 bg-muted hover:bg-muted/80 text-foreground px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer border border-border disabled:opacity-40"
                   title="Reset Playback"
                 >
                   <FontAwesomeIcon icon={faRotateRight} className="h-3 w-3" />
@@ -812,13 +879,17 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
 
           <div className="flex items-center gap-2.5">
-            <span className="font-mono">{terminalLogs.length} Waypoints</span>
-            {terminalLogs.length > 0 && (
+            <span className="font-mono">
+              {terminalLogs.length}
+              {isFiltered ? ` / ${allTerminalLogs.length}` : ''} Waypoints
+            </span>
+            {allTerminalLogs.length > 0 && (
               <>
                 <button
                   onClick={handleExportExcel}
-                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer"
-                  title="Export all data to Excel"
+                  disabled={terminalLogs.length === 0}
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors shadow-xs cursor-pointer disabled:opacity-40"
+                  title="Export filtered data to CSV/Excel"
                 >
                   <FontAwesomeIcon icon={faFileExcel} className="h-3.5 w-3.5" />
                   <span>Export</span>
@@ -835,6 +906,65 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             )}
           </div>
         </div>
+
+        {/* Date & Hour Range Filter Bar */}
+        {allTerminalLogs.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 bg-muted/40 rounded-lg border border-border/60 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-foreground">
+                <FontAwesomeIcon icon={faCalendarDay} className="h-3.5 w-3.5 text-primary" />
+                <span>GPS Range (GMT+8):</span>
+              </span>
+
+              <label className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                <span>From</span>
+                <input
+                  type="datetime-local"
+                  value={startDateTime}
+                  onChange={(e) => setStartDateTime(e.target.value)}
+                  className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+
+              <label className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                <span>To</span>
+                <input
+                  type="datetime-local"
+                  value={endDateTime}
+                  onChange={(e) => setEndDateTime(e.target.value)}
+                  className="bg-background text-foreground border border-input rounded-md px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center gap-1.5 font-mono text-[10px]">
+              <button
+                type="button"
+                onClick={() => applyPresetHours(6)}
+                className="px-2 py-1 rounded bg-background hover:bg-muted text-foreground border border-border cursor-pointer transition-colors"
+              >
+                Last 6h
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPresetHours(24)}
+                className="px-2 py-1 rounded bg-background hover:bg-muted text-foreground border border-border cursor-pointer transition-colors"
+              >
+                Last 24h
+              </button>
+              {isFiltered && (
+                <button
+                  type="button"
+                  onClick={() => applyPresetHours(null)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border border-amber-500/30 cursor-pointer transition-colors font-semibold"
+                >
+                  <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
+                  <span>All</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
           {terminalLogs.map((log: any, idx: number) => {
@@ -928,8 +1058,21 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       </div>
 
       {!latestLog ? (
-        <div className="text-xs bg-destructive/10 text-destructive p-3 rounded-lg border border-destructive/20">
-          No waypoints found. Select a device from the sidebar or wait for incoming packets.
+        <div className="text-xs bg-destructive/10 text-destructive p-3 rounded-lg border border-destructive/20 flex items-center justify-between gap-2">
+          <span>
+            {isFiltered
+              ? 'No waypoints match the selected start and end date/time range.'
+              : 'No waypoints found. Select a device from the sidebar or wait for incoming packets.'}
+          </span>
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={() => applyPresetHours(null)}
+              className="px-2.5 py-1 rounded bg-background text-foreground border border-border text-[11px] font-mono cursor-pointer shrink-0"
+            >
+              Clear Filter
+            </button>
+          )}
         </div>
       ) : (
         <div className="text-xs text-muted-foreground bg-muted p-4 rounded-lg space-y-2.5 border border-border relative">
