@@ -21,7 +21,6 @@ import {
   faExpand,
   faCompress,
   faCamera,
-  faFilter,
   faRotateLeft,
   faRoute,
 } from '@fortawesome/free-solid-svg-icons';
@@ -433,7 +432,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
       const currentSegmentLatLngs = latLngs.slice(0, activeProgressIndices);
 
       const animatedPolyline = L.polyline(currentSegmentLatLngs, {
-        color: '#2563eb',
+        color: '#eab308',
         weight: 4,
         opacity: 0.9,
         dashArray: '1, 12',
@@ -488,7 +487,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               </tr>
               <tr>
                 <td style="padding: 2px 0; color: #6b7280;">Leg Distance:</td>
-                <td style="padding: 2px 0; font-weight: 700; color: #2563eb;">${legDistanceText}</td>
+                <td style="padding: 2px 0; font-weight: 700; color: #d97706;">${legDistanceText}</td>
               </tr>
               <tr>
                 <td style="padding: 2px 0; color: #6b7280;">Total Distance:</td>
@@ -729,7 +728,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           if (idx === 0) ctx.moveTo(p.x, p.y);
           else ctx.lineTo(p.x, p.y);
         });
-        ctx.strokeStyle = '#2563eb';
+        ctx.strokeStyle = '#eab308';
         ctx.lineWidth = 4;
         ctx.setLineDash([6, 8]);
         ctx.stroke();
@@ -780,7 +779,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
   const latestElevation = latestLog?.elevation !== null && latestLog?.elevation !== undefined ? `${latestLog.elevation}m` : 'N/A';
   const latestTemp = latestLog?.temperature !== null && latestLog?.temperature !== undefined ? `${latestLog.temperature}°C` : 'N/A';
   const tempNum = latestLog?.temperature !== undefined ? Number(latestLog.temperature) : 0;
-  const tempAnimClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500 font-semibold' : 'text-blue-400';
+  const tempAnimClass = tempNum > 40 ? 'text-destructive font-bold animate-pulse' : tempNum > 30 ? 'text-amber-500 font-semibold' : 'text-amber-400';
 
   const handleZoomToWaypoint = (waypointNum: number, lat: number, lng: number) => {
     setIsPlaying(false);
@@ -915,6 +914,16 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
 
   return (
     <div className="space-y-4">
+      <style jsx>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+
       <div className="bg-card border border-border p-3 rounded-xl shadow-xs space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-muted-foreground px-1">
           <div className="flex items-center gap-2">
@@ -924,12 +933,12 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                 <button
                   onClick={togglePlayAnimation}
                   disabled={terminalLogs.length === 0}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-white transition-colors cursor-pointer shadow-xs disabled:opacity-40 ${
-                    isPlaying ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-xs disabled:opacity-40 ${
+                    isPlaying ? 'bg-amber-500 hover:bg-amber-600 text-black font-bold' : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                   }`}
                   title={isPlaying ? 'Pause Animation' : 'Play Waypoint Animation'}
                 >
-                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3 text-white" />
+                  <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="h-3 w-3" />
                   <span>{isPlaying ? 'Pause' : 'Play'}</span>
                 </button>
                 <button
@@ -977,9 +986,8 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
         {allTerminalLogs.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 bg-muted/40 rounded-lg border border-border/60 text-xs">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-foreground">
-                <FontAwesomeIcon icon={faFilter} className="h-3.5 w-3.5 text-blue-500" />
-                <span>Filter:</span>
+              <span className="font-mono text-[11px] font-semibold text-foreground">
+                Filter:
               </span>
 
               <select
@@ -1027,7 +1035,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <button
                 type="button"
                 onClick={() => handlePresetChange('ALL')}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 cursor-pointer transition-colors font-mono text-[10px] font-semibold"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 cursor-pointer transition-colors font-mono text-[10px] font-semibold"
               >
                 <FontAwesomeIcon icon={faRotateLeft} className="h-2.5 w-2.5" />
                 <span>Clear</span>
@@ -1036,7 +1044,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           </div>
         )}
 
-        <div className="flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap scrollbar-thin">
+        <div className="no-scrollbar flex flex-row items-center overflow-x-auto py-2 px-1 gap-2 whitespace-nowrap">
           {terminalLogs.map((log: any, idx: number) => {
             const isLast = idx === terminalLogs.length - 1;
             const color = isLast ? '#16a34a' : WAYPOINT_COLORS[idx % WAYPOINT_COLORS.length];
@@ -1057,7 +1065,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <React.Fragment key={idx}>
                 {idx > 0 && (
                   <div className="flex flex-col items-center shrink-0 px-0.5 select-none">
-                    <span className="text-[9px] font-mono font-semibold text-blue-500">
+                    <span className="text-[9px] font-mono font-semibold text-amber-400">
                       {formatKm(legKm)}
                     </span>
                     <span className="text-muted-foreground/40 font-mono leading-none">
@@ -1087,7 +1095,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
                     <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
                       <span>{transmitTimeAgo}</span>
                       {idx > 0 && (
-                        <span className="text-blue-500 font-semibold">
+                        <span className="text-amber-400 font-semibold">
                           • +{formatKm(legKm)}
                         </span>
                       )}
@@ -1128,7 +1136,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
             title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Map'}
           >
-            <FontAwesomeIcon icon={isFullscreen ? faCompress : faExpand} className="h-3.5 w-3.5 text-blue-400" />
+            <FontAwesomeIcon icon={isFullscreen ? faCompress : faExpand} className="h-3.5 w-3.5 text-amber-400" />
             <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
           </button>
         </div>
@@ -1138,7 +1146,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
           className="absolute bottom-4 right-4 z-[20] flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 text-white px-3.5 py-2 rounded-lg shadow-lg border border-white/20 text-xs font-medium transition-all backdrop-blur cursor-pointer"
           title="Reset map view to fit all waypoints"
         >
-          <FontAwesomeIcon icon={faCrosshairs} className="h-3.5 w-3.5 text-blue-400" />
+          <FontAwesomeIcon icon={faCrosshairs} className="h-3.5 w-3.5 text-amber-400" />
           <span>Reset View</span>
         </button>
       </div>
@@ -1167,18 +1175,18 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
             <span className="font-bold text-sm text-foreground">{latestBattery.percent}%</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-border/60 pb-2.5 pr-28">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 border-b border-border/60 pb-2.5 pr-28">
             <div>
               Device Name: <span className="font-bold text-foreground text-sm">{activeDeviceName}</span>
             </div>
-            <div className="flex items-center gap-3 font-mono">
-              <span>
+            <div className="flex flex-col sm:items-end gap-1 font-mono">
+              <div>
                 Total Waypoints: <span className="font-bold text-foreground">{terminalLogs.length}</span>
-              </span>
-              <span className="inline-flex items-center gap-1 text-blue-500 font-bold">
+              </div>
+              <div className="inline-flex items-center gap-1.5 text-amber-400 font-bold">
                 <FontAwesomeIcon icon={faRoute} className="h-3 w-3" />
-                <span>Total: {formatKm(latestDistanceInfo.cumulativeKm)}</span>
-              </span>
+                <span>Total Distance: {formatKm(latestDistanceInfo.cumulativeKm)}</span>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono">
@@ -1186,7 +1194,7 @@ export default function AssetMap({ devices = [], selectedDevice, registeredDevic
               <span className="text-muted-foreground/80">Latest Coordinates:</span>{' '}
               <span className="font-bold text-foreground">{latestLog.latitude}, {latestLog.longitude}</span>
               {terminalLogs.length > 1 && (
-                <span className="ml-2 text-blue-500 font-semibold">
+                <span className="ml-2 text-amber-400 font-semibold">
                   (+{formatKm(latestDistanceInfo.legKm)} from #{terminalLogs.length - 1})
                 </span>
               )}
